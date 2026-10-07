@@ -1,0 +1,57 @@
+@model ImportJob
+@{
+    Layout = "_WizardLayout";
+    var verb = Model.IsCheck ? "Checking" : "Creating";
+    ViewData["Title"] = $"{verb} {Model.What.ToLower()}";
+    ViewData["Step"] = Model.What == "Templates" ? "templates" : "schemas";
+}
+@Html.AntiForgeryToken()
+<div id="job" data-id="@Model.Id" data-mode="@Model.Mode">
+    <div class="step-head">
+        <span class="step-no">@(Model.What == "Templates" ? "Step 5 of 6" : "Step 4 of 6"), @verb.ToLower()</span>
+        <h1 id="headline">@verb @Model.What.ToLower()</h1>
+        @if (Model.IsCheck)
+        {
+            <p class="lead">Modelry is reading the publication and comparing it with @Model.FileName. Nothing is changed during the check – the findings open when it finishes.</p>
+        }
+        else
+        {
+            <p class="lead">From @Model.FileName into <span id="target">@(string.IsNullOrEmpty(Model.FolderTitle) ? "the selected folder" : $"{Model.PublicationTitle} / {Model.FolderTitle}")</span>. You can leave this page – the work continues on the server.</p>
+        }
+    </div>
+
+    <div class="card">
+        <div class="progress-headline">
+            <p class="progress-label" id="step-label" aria-live="polite">Step 1 of @Model.StepNames.Length: @Model.StepNames[0]</p>
+            <span class="pct" id="pct" aria-hidden="true"></span>
+        </div>
+        <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="step-label">
+            <div class="progress-bar indeterminate" id="bar"></div>
+        </div>
+        <p class="progress-item" id="item"></p>
+        <div class="tally" style="margin-bottom:0" @(Model.IsCheck ? "hidden" : "")>
+            <span><b id="created">0</b> created</span>
+            <span><b id="warnings">0</b> warnings</span>
+            <span><b id="errors">0</b> errors</span>
+            <span class="muted">Elapsed <span id="elapsed">0:00</span></span>
+        </div>
+        <ol class="steps" id="steps">
+            @for (var i = 0; i < Model.StepNames.Length; i++)
+            {
+                <li class="@(i == 0 ? "active" : "pending")" data-step="@(i + 1)"><span class="dot" aria-hidden="true"></span><span>@Model.StepNames[i]</span><span class="count muted"></span></li>
+            }
+        </ol>
+        <button type="button" class="btn btn--quiet btn--small" id="cancel"
+                data-confirm="@(Model.IsCheck ? "Cancel the check? Nothing has been changed." : "Stop after the current item? Anything already created stays in the CMS.")">@(Model.IsCheck ? "Cancel the check" : "Stop after the current item")</button>
+    </div>
+
+    <h2 class="section-title" @(Model.IsCheck ? "hidden" : "")>Latest activity</h2>
+    <div class="table-wrap" @(Model.IsCheck ? "hidden" : "")>
+        <table class="data" id="activity">
+            <thead><tr><th>Time</th><th>Level</th><th>Item</th><th>What happened</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+    <noscript><p>Live progress needs JavaScript. <a asp-action="Job" asp-route-id="@Model.Id">Check the result</a>.</p></noscript>
+</div>
+@section Scripts { <script src="~/js/progress.js" asp-append-version="true"></script> }

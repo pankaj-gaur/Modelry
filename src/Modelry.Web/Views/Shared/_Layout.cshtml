@@ -1,0 +1,55 @@
+@inject TridionSession Cms
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@(ViewData["Title"] is string t ? $"{t} – Modelry" : "Modelry")</title>
+    <link rel="icon" href="~/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+<a class="sr-only" href="#main">Skip to content</a>
+<header class="app-header">
+    <div class="app-header__inner">
+        <a class="brand" asp-controller="Home" asp-action="Index" aria-label="Modelry home">
+            <img src="~/img/modelry-mark.svg" alt="" width="34" height="34" />
+            <span class="brand__name">Modelry</span>
+        </a>
+        <nav class="app-nav" aria-label="Tools">
+            @if (Cms.IsConnected && !Cms.IsAem)
+            {
+                <a class="hide-sm" asp-controller="Export" asp-action="Index">Export from CMS</a>
+            }
+            <a class="hide-sm" asp-controller="Sample" asp-action="Template">Sample IA workbook</a>
+        </nav>
+        @if (Cms.IsConnected)
+        {
+            <div class="conn" title="@Cms.ApiVersion">
+                <span class="conn__dot" aria-hidden="true"></span>
+                <span class="conn__text"><b>@Cms.CmsName</b><span>@(Cms.IsDemo ? "Demo data" : $"{Cms.UserName} on {Cms.Host}")</span></span>
+                <form asp-controller="Account" asp-action="Logout" method="post"><button type="submit" class="btn btn--quiet btn--small">Sign out</button></form>
+            </div>
+        }
+    </div>
+</header>
+<main id="main">
+    @if (ViewData["InWizard"] is null && TempData["Error"] is string err)
+    {
+        <div class="page" style="padding-top:24px"><div class="alert alert--error" role="alert"><p>@err</p></div></div>
+    }
+    @RenderBody()
+</main>
+<footer class="app-footer">
+    <div class="app-footer__inner">
+        <span>Modelry is built by</span>
+        <img src="~/img/content-bloom-logo.jpg" alt="Content Bloom" width="94" height="30" />
+    </div>
+</footer>
+@await RenderSectionAsync("Scripts", required: false)
+<script>
+  // On narrow screens the journey rail scrolls sideways – keep the current step in view.
+  document.querySelector('.rail .is-current')?.scrollIntoView({ inline: 'center', block: 'nearest' });
+</script>
+</body>
+</html>

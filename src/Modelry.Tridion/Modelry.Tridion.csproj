@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Modelry.Tridion</RootNamespace>
+  </PropertyGroup>
+  <!-- The real Core Service gateway is compiled only once the proxy has been generated (see README). -->
+  <PropertyGroup>
+    <!-- true only if OAuthBinding = wsHttp (ISessionAwareCoreService). Default: basicHttp (ICoreService). -->
+    <UseSessionAwareContract>false</UseSessionAwareContract>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(UseSessionAwareContract)' == 'true'">
+    <DefineConstants>$(DefineConstants);CORESERVICE_SESSIONAWARE</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="Exists('Connected Services\CoreService\Reference.cs')">
+    <DefineConstants>$(DefineConstants);CORESERVICE_PROXY</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="System.ServiceModel.Http" Version="6.0.0" />
+    <PackageReference Include="System.ServiceModel.Primitives" Version="6.0.0" />
+    <PackageReference Include="System.ServiceModel.NetTcp" Version="6.0.0" />
+    <PackageReference Include="System.ServiceModel.Security" Version="6.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Modelry.Core\Modelry.Core.csproj" />
+  </ItemGroup>
+</Project>

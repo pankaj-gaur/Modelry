@@ -1,0 +1,39 @@
+@model WizardData
+@inject TridionSession Cms
+@{
+    Layout = "_WizardLayout";
+    ViewData["Title"] = "Finish";
+    ViewData["Step"] = "finish";
+}
+<div class="step-head">
+    <span class="step-no">Step 6 of 6</span>
+    <h1>@(Model.SchemaRun is not null || Model.TemplateRun is not null ? "Your content model is in place" : "Nothing created yet")</h1>
+    <p class="lead">@(Cms.IsAem ? "AEM creation arrives in the next release. Your workbook is validated and its AEM mapping is ready." : "Here's what Modelry created from " + Model.FileName + ". Download the logs for your audit trail.")</p>
+</div>
+@foreach (var (title, run, step) in new[] { ("Schemas", Model.SchemaRun, "Schemas"), ("Templates", Model.TemplateRun, "Templates") })
+{
+    <div class="card">
+        <h2>@title</h2>
+        @if (run is null)
+        {
+            <p class="muted" style="margin-top:8px">Not run in this session.</p>
+            @if (!Cms.IsAem) { <a class="btn btn--small" asp-action="@step">Go to @title.ToLower()</a> }
+        }
+        else
+        {
+            <p class="muted" style="margin-top:4px">In @run.FolderPath, @run.FinishedUtc.ToLocalTime().ToString("d MMM, HH:mm")@(run.Cancelled ? " (cancelled)" : "")</p>
+            <div class="tally"><span><b>@run.Created</b> created</span><span><b>@run.Skipped</b> skipped</span><span><b>@run.Failed</b> failed</span></div>
+            @if (run.ResultId is not null) { <a class="btn btn--small" asp-controller="Import" asp-action="Results" asp-route-id="@run.ResultId">Download log</a> }
+        }
+    </div>
+}
+<h2 class="section-title">Next steps</h2>
+<ul class="lead" style="padding-left:1.1em">
+    <li>Publish a test page with each Page Template to check the DXA views.</li>
+    <li>Ask the front-end team to confirm the template-to-component list in the workbook.</li>
+    <li>Run Modelry against the next environment with the same workbook – existing items are skipped.</li>
+</ul>
+<div class="actions">
+    <a class="btn" asp-action="Upload">Use another workbook</a>
+    @if (!Cms.IsAem) { <a class="btn btn--quiet" asp-controller="Export" asp-action="Index">Export a model from the CMS</a> }
+</div>

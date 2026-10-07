@@ -1,0 +1,81 @@
+@model WizardData
+@inject TridionSession Cms
+@{
+    Layout = "_WizardLayout";
+    ViewData["Title"] = "Upload your IA";
+    ViewData["Step"] = "ia";
+    var s = Model.Summary;
+}
+@Html.AntiForgeryToken()
+<div class="step-head">
+    <span class="step-no">Step 3 of 6</span>
+    <h1>@(Model.HasIa ? "Your Information Architecture" : "Upload your Information Architecture")</h1>
+    <p class="lead">@(Model.HasIa ? "Modelry uses this workbook for every step that follows. Replace it any time – the steps reset." : "One workbook describes everything: schemas, fields, regions, templates and taxonomy. You upload it once; every following step uses it.")</p>
+</div>
+
+@if (Model.HasIa && s is not null)
+{
+    <div class="card">
+        <div class="ia-file">
+            <span class="ia-file__icon" aria-hidden="true">XLSX</span>
+            <div class="ia-file__body">
+                <div class="ia-file__name">@Model.FileName</div>
+                <div class="muted small">Uploaded @Model.UploadedUtc?.ToLocalTime().ToString("d MMM yyyy, HH:mm")</div>
+            </div>
+            <form asp-action="RemoveIa" method="post"><button class="btn btn--quiet btn--small" type="submit">Remove</button></form>
+        </div>
+        <dl class="counts">
+            <div><dt>Schemas</dt><dd>@s.Schemas<small>@string.Join(", ", s.SchemasByPurpose.OrderByDescending(p => p.Value).Select(p => $"{p.Value} {p.Key.ToLower()}"))</small></dd></div>
+            <div><dt>Fields</dt><dd>@s.Fields</dd></div>
+            <div><dt>Templates</dt><dd>@(s.ComponentTemplates + s.PageTemplates)<small>@(s.TemplatesSource is null ? "No Templates sheet in this workbook" : $"{s.ComponentTemplates} Component (CT), {s.PageTemplates} Page (PT)")</small></dd></div>
+            <div><dt>Taxonomy</dt><dd>@s.Categories<small>categories with @s.Keywords keywords</small></dd></div>
+        </dl>
+    </div>
+    @if (s.TemplatesSource is null)
+    {
+        <div class="alert alert--info" role="status" style="margin-top:24px"><div>
+            <p><b>This workbook has no Templates sheet</b>, so the template step has nothing to create. Schemas and taxonomy are not affected.</p>
+            <p class="small muted">Sheets found: @string.Join(", ", s.SheetNames). Add a sheet named “Templates” with the columns from the <a asp-controller="Sample" asp-action="Template">sample workbook</a>, or upload the current version of your IA.</p>
+        </div></div>
+    }
+    else if (s.Notes.Count > 0)
+    {
+        <div class="alert alert--warn" role="status" style="margin-top:24px"><div>@foreach (var n in s.Notes) { <p>@n</p> }</div></div>
+    }
+    @if (s.ReadErrors.Count > 0)
+    {
+        <div class="alert alert--warn" role="status" style="margin-top:24px"><div><p><b>Some rows could not be read.</b> They'll be listed again when you check schemas or templates.</p>
+            <ul class="small">@foreach (var e in s.ReadErrors) { <li>@e</li> }</ul></div></div>
+    }
+    <div class="actions">
+        <a class="btn btn--primary" asp-action="Schemas">Create schemas</a>
+        <a class="btn" asp-action="Templates">Create templates</a>
+        <details>
+            <summary class="btn btn--quiet">Replace workbook</summary>
+            <form asp-action="Upload" method="post" enctype="multipart/form-data" class="replace" style="margin-top:12px">
+                <label class="dropzone" style="min-height:140px">
+                    <input type="file" name="file" accept=".xlsx" required />
+                    <span class="dropzone__title">Choose a new workbook</span>
+                    <span class="dropzone__file" aria-live="polite"></span>
+                </label>
+                <div class="actions"><button class="btn" type="submit">Upload and replace</button></div>
+            </form>
+        </details>
+    </div>
+}
+else
+{
+    <form asp-action="Upload" method="post" enctype="multipart/form-data">
+        <label class="dropzone">
+            <input type="file" name="file" accept=".xlsx" required />
+            <span class="dropzone__title">Drop your IA workbook here</span>
+            <span class="muted">or click to choose an .xlsx file (up to 10 MB)</span>
+            <span class="dropzone__file" aria-live="polite"></span>
+        </label>
+        <div class="actions">
+            <button class="btn btn--primary" type="submit">Upload and read workbook</button>
+            <a class="btn btn--quiet" asp-controller="Sample" asp-action="Template">Download the sample workbook</a>
+        </div>
+    </form>
+}
+@section Scripts { <script src="~/js/upload.js" asp-append-version="true"></script> }

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="modelry-title">
+  <title id="modelry-title">Modelry</title>
+  <!-- Three translucent layers of a content model – taxonomy, schemas, templates – overlapping like the Content Bloom petals -->
+  <g style="mix-blend-mode:multiply">
+    <path d="M32 30 L58 43 L32 56 L6 43 Z" fill="#f6b565"/>
+    <path d="M32 19 L58 32 L32 45 L6 32 Z" fill="#ee486c" fill-opacity=".85"/>
+    <path d="M32 8 L58 21 L32 34 L6 21 Z" fill="#0085b0" fill-opacity=".88"/>
+  </g>
+</svg>

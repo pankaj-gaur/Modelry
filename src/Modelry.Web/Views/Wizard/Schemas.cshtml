@@ -1,0 +1,47 @@
+@model WizardData
+@inject TridionSession Cms
+@{
+    Layout = "_WizardLayout";
+    ViewData["Title"] = "Create schemas";
+    ViewData["Step"] = "schemas";
+    var s = Model.Summary!;
+}
+@Html.AntiForgeryToken()
+<div class="step-head">
+    <span class="step-no">Step 4 of 6</span>
+    <h1>Create schemas</h1>
+    @if (Cms.IsAem)
+    {
+        <p class="lead">Here's how the @s.Schemas schemas in your workbook translate to AEM. Creating them in AEM arrives in the next release.</p>
+    }
+    else
+    {
+        <p class="lead">Choose where the @s.Schemas schemas go. Modelry checks the workbook against that publication first and changes nothing until you confirm.</p>
+    }
+</div>
+
+@if (Cms.IsAem)
+{
+    <partial name="_AemMapping" model="Model" />
+}
+else
+{
+    @if (Model.SchemaRun is { } run)
+    {
+        <div class="alert alert--info" role="status"><div>
+            <p>Last run in <b>@run.FolderPath</b>: @run.Created created, @run.Skipped skipped@(run.Failed > 0 ? $", {run.Failed} failed" : ""). Running again skips schemas that already exist.</p>
+            <p><a class="btn btn--primary" asp-action="Templates">Continue to create templates</a></p>
+        </div></div>
+    }
+    <form asp-controller="Import" asp-action="DryRun" method="post" data-needs-folder>
+        <h2 class="section-title" style="margin-top:0">Where should they be created?</h2>
+        <p class="muted">Usually the <b>Building Blocks</b> folder of your schema master publication. Folders in the workbook (such as Schemas/Component) are created beneath it.</p>
+        @{ ViewData["PickerId"] = "schema-picker"; ViewData["InputName"] = "folderId"; }
+        <partial name="_FolderPicker" view-data="ViewData" />
+        <div class="actions">
+            <button class="btn btn--primary" type="submit" disabled data-busy="Starting the check…">Check schemas</button>
+            <a class="btn btn--quiet" asp-action="Templates">Go to create templates</a>
+        </div>
+    </form>
+}
+@section Scripts { <script src="~/js/picker.js" asp-append-version="true"></script> }

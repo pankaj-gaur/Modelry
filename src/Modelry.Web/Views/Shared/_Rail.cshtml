@@ -1,0 +1,42 @@
+@inject TridionSession Cms
+@inject WizardState Wizard
+@{
+    var d = Wizard.Data;
+    var current = ViewData["Step"] as string ?? "";
+    string State(string key, bool done) => key == current ? "is-current" : done ? "is-done" : d.HasIa || key is "cms" or "connect" or "ia" ? "" : "is-locked";
+    string Run(RunSummary? r) => r is null ? "" : $"{r.Created} created, {r.Skipped} skipped";
+    var steps = new (string Key, string Title, bool Done, string? Controller, string? Action, bool Linkable, string Meta, bool Bad)[]
+    {
+        ("cms", "Target CMS", Cms.Cms is not null, null, null, false, Cms.CmsName, false),
+        ("connect", "Connect", Cms.IsConnected, null, null, false, Cms.IsConnected ? (Cms.IsDemo ? "Demo data" : $"{Cms.UserName}, {Cms.Host}") : "Not connected", false),
+        ("ia", "Upload IA", d.HasIa, "Wizard", "Upload", true, d.HasIa ? $"{d.FileName}" : "Your Information Architecture workbook", false),
+        ("schemas", "Schemas", d.SchemaRun is not null, "Wizard", "Schemas", d.HasIa,
+            Cms.IsAem ? "Mapping preview" : d.SchemaRun is null ? $"{d.Summary?.Schemas ?? 0} in the workbook" : Run(d.SchemaRun), (d.SchemaRun?.Failed ?? 0) > 0),
+        ("templates", "Templates", d.TemplateRun is not null, "Wizard", "Templates", d.HasIa,
+            Cms.IsAem ? "Mapping preview" : d.TemplateRun is null ? $"{(d.Summary?.ComponentTemplates ?? 0) + (d.Summary?.PageTemplates ?? 0)} in the workbook" : Run(d.TemplateRun), (d.TemplateRun?.Failed ?? 0) > 0),
+        ("finish", "Finish", d.SchemaRun is not null && d.TemplateRun is not null, "Wizard", "Finish", d.HasIa, "Results and next steps", false),
+    };
+}
+<ol>
+    @for (var i = 0; i < steps.Length; i++)
+    {
+        var s = steps[i];
+        var state = State(s.Key, s.Done);
+        <li class="@state" aria-current="@(state == "is-current" ? "step" : null)">
+            <span class="rail__dot" aria-hidden="true">@(s.Done && state != "is-current" ? "✓" : (i + 1).ToString())</span>
+            @if (s.Linkable && state != "is-current")
+            {
+                <a class="rail__title" asp-controller="@s.Controller" asp-action="@s.Action">@s.Title</a>
+            }
+            else
+            {
+                <span class="rail__title">@s.Title</span>
+            }
+            <span class="rail__meta">
+                @s.Meta
+                @if (s.Key == "schemas" && (d.SchemaRun?.Failed ?? 0) > 0) { <span class="bad">, @d.SchemaRun!.Failed failed</span> }
+                @if (s.Key == "templates" && (d.TemplateRun?.Failed ?? 0) > 0) { <span class="bad">, @d.TemplateRun!.Failed failed</span> }
+            </span>
+        </li>
+    }
+</ol>

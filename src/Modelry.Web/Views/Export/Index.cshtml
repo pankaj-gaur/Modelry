@@ -1,0 +1,32 @@
+@inject TridionSession Cms
+@{ ViewData["Title"] = "Export from CMS"; }
+@Html.AntiForgeryToken()
+<div class="page" style="padding-top:48px;padding-bottom:64px">
+    <div class="step-head" style="max-width:760px">
+        <h1>Export a content model to a workbook</h1>
+        <p class="lead">Choose a folder to write its schemas or templates into an IA workbook – to document an existing site, compare environments, or start a new model from one you already have.</p>
+    </div>
+    @if (Cms.IsAem)
+    {
+        <div class="alert alert--info"><p>Export from AEM arrives with AEM creation in the next release.</p></div>
+    }
+    else
+    {
+        <div style="max-width:960px">
+            @{ ViewData["PickerId"] = "export-picker"; ViewData["InputName"] = "folderId"; }
+            <form method="get" data-needs-folder id="export-form">
+                <partial name="_FolderPicker" view-data="ViewData" />
+                <label class="check" style="margin-top:24px">
+                    <input type="checkbox" name="recursive" value="true" checked />
+                    <span>Include sub-folders</span>
+                </label>
+                <input type="hidden" name="recursive" value="false" />
+                <div class="actions">
+                    <button class="btn btn--primary" type="submit" formaction="@Url.Action("Download", "Export")" disabled>Export schemas</button>
+                    <button class="btn" type="submit" formaction="@Url.Action("Export", "Templates")" disabled>Export templates</button>
+                </div>
+            </form>
+        </div>
+    }
+</div>
+@section Scripts { <script src="~/js/picker.js" asp-append-version="true"></script> }

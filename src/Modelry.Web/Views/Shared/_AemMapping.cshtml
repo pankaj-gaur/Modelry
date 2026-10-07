@@ -1,0 +1,24 @@
+@model WizardData
+@{
+    var s = Model.Summary!;
+    int P(string k) => s.SchemasByPurpose.TryGetValue(k, out var n) ? n : 0;
+}
+<div class="card">
+    <h2>How your workbook maps to AEM</h2>
+    <p class="muted" style="margin-top:8px">Counts come from @Model.FileName. Items marked “content” can be created through AEM's APIs; items marked “code” become generated source for your developers.</p>
+    <div class="map-list" role="table" aria-label="Mapping from workbook to AEM">
+        <div role="row"><b role="cell">Component schemas</b><span role="cell">Content Fragment Models (content) or component dialogs + Sling Models (code)</span><span class="n" role="cell">@P("Component")</span></div>
+        <div role="row"><b role="cell">Embedded schemas</b><span role="cell">Nested fragment models or composite multifields</span><span class="n" role="cell">@P("Embedded")</span></div>
+        <div role="row"><b role="cell">Multimedia schemas</b><span role="cell">Assets metadata schemas (content)</span><span class="n" role="cell">@P("Multimedia")</span></div>
+        <div role="row"><b role="cell">Metadata schemas</b><span role="cell">Page properties dialog (code) and tag-based metadata</span><span class="n" role="cell">@P("Metadata")</span></div>
+        <div role="row"><b role="cell">Region and page schemas</b><span role="cell">Editable templates with layout containers and policies (content)</span><span class="n" role="cell">@P("Region")</span></div>
+        <div role="row"><b role="cell">Categories and keywords</b><span role="cell">Tag namespaces and tags (content)</span><span class="n" role="cell">@(s.Categories + s.Keywords)</span></div>
+        <div role="row"><b role="cell">Component Templates</b><span role="cell">Component HTL and style-system variations (code)</span><span class="n" role="cell">@s.ComponentTemplates</span></div>
+        <div role="row"><b role="cell">Page Templates</b><span role="cell">Editable templates (content)</span><span class="n" role="cell">@s.PageTemplates</span></div>
+    </div>
+</div>
+<div class="alert alert--info" role="status" style="margin-top:24px"><p>Creating these in AEM is planned for the next release. Your connection and workbook are ready for it.</p></div>
+<div class="actions">
+    @if (ViewData["Step"] as string == "schemas") { <a class="btn btn--primary" asp-action="Templates">Continue to create templates</a> }
+    else { <a class="btn btn--primary" asp-action="Finish">Continue to finish</a> }
+</div>

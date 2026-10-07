@@ -1,0 +1,7 @@
+bin/
+obj/
+logs/
+*.user
+.vs/
+# generated Core Service proxy (environment specific)
+src/Modelry.Tridion/Connected Services/CoreService/Reference.cs

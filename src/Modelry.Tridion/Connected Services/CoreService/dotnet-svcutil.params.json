@@ -1,0 +1,15 @@
+{
+  "providerId": "Microsoft.Tools.ServiceModel.Svcutil",
+  "version": "8.0.0",
+  "options": {
+    "inputs": [
+      "http://dev-cm-service.sabic.com//webservices/CoreService201701.svc?singleWsdl"
+    ],
+    "namespaceMappings": [
+      "*, Tridion.ContentManager.CoreService.Client"
+    ],
+    "outputFile": "Reference.cs",
+    "targetFramework": "net8.0",
+    "typeReuseMode": "All"
+  }
+}

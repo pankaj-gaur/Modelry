@@ -1,0 +1,72 @@
+@model TemplateDryRunViewModel
+@using Modelry.Core.Gateway
+@{
+    Layout = "_WizardLayout";
+    ViewData["Title"] = "Check templates";
+    ViewData["Step"] = "templates";
+    var errors = Model.Plan.Issues.Count(i => i.Level == IssueLevel.Error);
+    var cts = Model.Plan.Items.Count(i => i.Kind == TemplateKind.Component && i.Action == PlanAction.Create);
+    var pts = Model.Plan.Items.Count(i => i.Kind == TemplateKind.Page && i.Action == PlanAction.Create);
+    var skipped = Model.Plan.Items.Count(i => i.Action == PlanAction.Skip);
+    var inc = string.Join(", ", new[] { Model.HeaderInclude, Model.FooterInclude }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<div class="step-head">
+    <span class="step-no">Step 5 of 6, check</span>
+    <h1>@(errors == 0 ? $"Ready to create {cts + pts} templates" : $"{errors} problem{(errors == 1 ? "" : "s")} to fix first")</h1>
+    <p class="lead">Checked against <b>@Model.PublicationTitle / @Model.FolderTitle</b>. Nothing has been changed yet.</p>
+</div>
+<div class="tally">
+    <span><b>@cts</b> Component Templates</span>
+    <span><b>@pts</b> Page Templates</span>
+    <span><b>@skipped</b> already exist</span>
+    <span><b>@Model.Plan.RegionConstraints.Count(r => r.Apply)</b> regions limited</span>
+</div>
+<p class="muted">Includes for Page Templates: @(inc.Length > 0 ? inc : "kept from the base template").</p>
+
+@if (errors == 0)
+{
+    <form asp-controller="Templates" asp-action="Execute" method="post" class="actions" style="margin-top:0" onsubmit="var b=this.querySelector('button');b.disabled=true;b.textContent='Starting…';">
+        <input type="hidden" name="uploadId" value="@Model.UploadId" />
+        <input type="hidden" name="fileName" value="@Model.FileName" />
+        <input type="hidden" name="folderId" value="@Model.FolderId" />
+        <input type="hidden" name="baseCtId" value="@Model.BaseComponentTemplateId" />
+        <input type="hidden" name="basePtId" value="@Model.BasePageTemplateId" />
+        <input type="hidden" name="headerInclude" value="@Model.HeaderInclude" />
+        <input type="hidden" name="footerInclude" value="@Model.FooterInclude" />
+        <input type="hidden" name="applyRegionConstraints" value="@(Model.ApplyRegionConstraints ? "true" : "false")" />
+        <input type="hidden" name="checkJobId" value="@Model.CheckJobId" />
+        <button type="submit" class="btn btn--primary">Create @(cts + pts) templates</button>
+        <a class="btn btn--quiet" asp-controller="Wizard" asp-action="Templates">Change choices</a>
+        <label class="check small" style="flex-basis:100%">
+            <input type="checkbox" name="recheck" value="true" />
+            <span>Check the publication again before creating<br /><span class="muted">Only needed if others are changing it right now. Otherwise Modelry uses this check for the next 30 minutes, and anything created by someone else meanwhile is skipped and reported.</span></span>
+        </label>
+    </form>
+}
+else
+{
+    <div class="alert alert--error" role="alert"><p>Fix the workbook rows or your choices listed below, then run the check again.</p></div>
+    <div class="actions" style="margin-top:0"><a class="btn btn--primary" asp-controller="Wizard" asp-action="Templates">Change choices</a><a class="btn btn--quiet" asp-controller="Wizard" asp-action="Upload">Upload a corrected workbook</a></div>
+}
+
+<h2 class="section-title">Findings</h2>
+<partial name="_Issues" model="Model.Plan.Issues" />
+
+<h2 class="section-title">Templates</h2>
+<div class="table-wrap">
+    <table class="data">
+        <thead><tr><th>Template</th><th>Cloned from</th><th>DXA view</th><th>Linked schemas or page schema</th></tr></thead>
+        <tbody>
+        @foreach (var i in Model.Plan.Items.OrderBy(i => i.Kind))
+        {
+            <tr class="@(i.Action == PlanAction.Skip ? "is-skip" : "")">
+                <td>@i.Template.Title<br /><span class="muted small">@i.FolderPath@(i.Action == PlanAction.Skip ? ", already exists" : "")</span></td>
+                <td>@(i.BaseTemplateTitle ?? "–")</td>
+                <td>@i.Template.View</td>
+                <td>@(i.Kind == TemplateKind.Component ? string.Join("; ", i.Template.LinkedSchemas) : i.Template.PageSchema)</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+@section Scripts { <script src="~/js/issues.js" asp-append-version="true"></script> }

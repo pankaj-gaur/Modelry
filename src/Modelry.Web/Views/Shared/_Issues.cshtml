@@ -1,0 +1,26 @@
+@model List<Issue>
+@{
+    var ordered = Model.OrderBy(i => i.Level).ToList();
+}
+<div class="filters" role="group" aria-label="Filter findings" data-issue-filters>
+    <button type="button" aria-pressed="true" data-level="all">All (@ordered.Count)</button>
+    <button type="button" aria-pressed="false" data-level="Error">Errors (@ordered.Count(i => i.Level == IssueLevel.Error))</button>
+    <button type="button" aria-pressed="false" data-level="Warning">Warnings (@ordered.Count(i => i.Level == IssueLevel.Warning))</button>
+    <button type="button" aria-pressed="false" data-level="Info">Notes (@ordered.Count(i => i.Level == IssueLevel.Info))</button>
+</div>
+<div class="table-wrap">
+    <table class="data" data-issues>
+        <thead><tr><th>Level</th><th>Where</th><th>Item</th><th>What to know</th></tr></thead>
+        <tbody>
+        @foreach (var i in ordered)
+        {
+            <tr data-level="@i.Level">
+                <td><span class="level level--@i.Level">@(i.Level == IssueLevel.Info ? "Note" : i.Level.ToString())</span></td>
+                <td class="muted">@i.Sheet@(i.Row > 0 ? $", row {i.Row}" : "")</td>
+                <td>@i.Item</td>
+                <td>@i.Message</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>

@@ -1,0 +1,25 @@
+@* Publication / folder picker. ViewData: PickerId, InputName, Label *@
+@{
+    var id = ViewData["PickerId"] as string ?? "picker";
+    var name = ViewData["InputName"] as string ?? "folderId";
+}
+<div class="picker" data-picker id="@id">
+    <div class="picker__tree">
+        <ul class="tree" role="tree" aria-label="Publications and folders"><li class="tree__empty">Loading publications…</li></ul>
+    </div>
+    <div class="picker__side">
+        <input type="hidden" name="@name" class="picker__value" required />
+        <div>
+            <span class="label muted small">Selected folder</span>
+            <p class="picker__selected" aria-live="polite">None yet – open a publication and choose a folder.</p>
+            <p class="picker__meta muted small"></p>
+        </div>
+        <div class="picker__new" hidden>
+            <label class="small" for="@(id)-new">Create a sub-folder here</label>
+            <div class="newfolder">
+                <input id="@(id)-new" maxlength="255" placeholder="Folder name" />
+                <button type="button" class="btn btn--small">Create</button>
+            </div>
+        </div>
+    </div>
+</div>

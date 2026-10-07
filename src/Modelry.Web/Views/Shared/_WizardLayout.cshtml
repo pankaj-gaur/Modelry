@@ -1,0 +1,17 @@
+@{
+    Layout = "_Layout";
+    ViewData["InWizard"] = true;
+}
+<div class="wizard">
+    <nav class="rail" aria-label="Your progress">
+        <partial name="_Rail" />
+    </nav>
+    <div class="wizard__main">
+        @if (TempData["Error"] is string err)
+        {
+            <div class="alert alert--error" role="alert"><p>@err</p></div>
+        }
+        @RenderBody()
+    </div>
+</div>
+@section Scripts { @await RenderSectionAsync("Scripts", required: false) }

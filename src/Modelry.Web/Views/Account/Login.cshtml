@@ -1,0 +1,85 @@
+@model LoginViewModel
+@{
+    var aem = Model.Cms == "aem";
+    ViewData["Title"] = aem ? "Connect to AEM" : "Connect to Tridion";
+    var oauth = Model.AuthMode == "OAuth";
+    var token = Model.AemAuth == "token";
+}
+<div class="auth">
+    <form asp-action="ChangeCms" method="post"><button type="submit" class="back-link">Choose a different CMS</button></form>
+    <div class="card">
+        <span class="step-no">Step 2 of 6</span>
+        <h1>@(aem ? "Connect to Adobe Experience Manager" : "Connect to Tridion Sites")</h1>
+        <p class="muted">@(aem ? "Use an author instance. Your password or token stays on the server for this session only." : "Your password or client secret is never stored in the browser.")</p>
+
+        @if (Model.Expired) { <div class="alert alert--warn" role="status"><p>Your session ended. Connect again to continue where you left off.</p></div> }
+        @if (Model.Error is not null) { <div class="alert alert--error" role="alert"><p>@Model.Error</p></div> }
+        @if (!aem && !Model.ProxyAvailable) { <div class="alert alert--info" role="status"><p>The Core Service client hasn't been generated on this server yet, so only demo data is available. See the README.</p></div> }
+
+        <form asp-action="Login" method="post" autocomplete="off">
+        @if (aem)
+        {
+            <div class="field">
+                <label asp-for="AemUrl"></label>
+                <input asp-for="AemUrl" type="url" />
+            </div>
+            <fieldset class="segmented" style="border:0">
+                <legend class="sr-only">Sign-in method</legend>
+                <label><input type="radio" name="AemAuth" value="basic" @(token ? "" : "checked") data-toggle="basic" /> User and password</label>
+                <label><input type="radio" name="AemAuth" value="token" @(token ? "checked" : "") data-toggle="token" /> Access token</label>
+            </fieldset>
+            <div data-panel="basic" @(token ? "hidden" : "")>
+                <div class="field"><label asp-for="AemUser"></label><input asp-for="AemUser" autocomplete="username" /></div>
+                <div class="field"><label asp-for="AemPassword"></label><input asp-for="AemPassword" autocomplete="current-password" /></div>
+            </div>
+            <div data-panel="token" @(token ? "" : "hidden")>
+                <div class="field">
+                    <label asp-for="AemToken"></label>
+                    <input asp-for="AemToken" />
+                    <span class="hint">For AEM as a Cloud Service: a local development token or service credentials token from the Developer Console.</span>
+                </div>
+            </div>
+        }
+        else
+        {
+            <fieldset class="segmented" style="border:0">
+                <legend class="sr-only">Sign-in method</legend>
+                <label><input type="radio" name="AuthMode" value="Windows" @(oauth ? "" : "checked") data-toggle="windows" /> Windows account</label>
+                <label><input type="radio" name="AuthMode" value="OAuth" @(oauth ? "checked" : "") data-toggle="oauth" /> OAuth client</label>
+            </fieldset>
+            <div class="field">
+                <label asp-for="CoreServiceUrl"></label>
+                <input asp-for="CoreServiceUrl" type="url" />
+                <span class="hint">For a Windows account use the basicHttp endpoint, ending in /CoreService201701.svc/basicHttp.</span>
+            </div>
+            <div data-panel="windows" @(oauth ? "hidden" : "")>
+                <div class="field"><label asp-for="UserName"></label><input asp-for="UserName" placeholder="DOMAIN\user" autocomplete="username" /></div>
+                <div class="field"><label asp-for="Password"></label><input asp-for="Password" autocomplete="current-password" /></div>
+            </div>
+            <div data-panel="oauth" @(oauth ? "" : "hidden")>
+                <div class="field"><label asp-for="TokenUrl"></label><input asp-for="TokenUrl" type="url" /></div>
+                <div class="row">
+                    <div class="field"><label asp-for="ClientId"></label><input asp-for="ClientId" /></div>
+                    <div class="field"><label asp-for="ClientSecret"></label><input asp-for="ClientSecret" /></div>
+                </div>
+                <div class="field"><label asp-for="Scope"></label><input asp-for="Scope" /></div>
+            </div>
+        }
+            <div class="actions">
+                <button type="submit" class="btn btn--primary">Connect</button>
+                @if (!aem && Model.DemoAllowed)
+                {
+                    <button type="submit" name="Demo" value="true" class="btn btn--quiet" formnovalidate>Explore with demo data</button>
+                }
+            </div>
+        </form>
+    </div>
+</div>
+@section Scripts {
+<script>
+  document.querySelectorAll('[data-toggle]').forEach(r => r.addEventListener('change', () => {
+    const active = document.querySelector('[data-toggle]:checked').dataset.toggle;
+    document.querySelectorAll('[data-panel]').forEach(p => p.hidden = p.dataset.panel !== active);
+  }));
+</script>
+}

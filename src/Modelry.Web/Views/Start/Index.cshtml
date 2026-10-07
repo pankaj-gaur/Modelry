@@ -1,0 +1,42 @@
+@{ ViewData["Title"] = "Choose your CMS"; }
+<section class="start-band">
+    <div class="start-band__inner">
+        <h1>Build your content model from one workbook.</h1>
+        <p>Modelry turns an Information Architecture workbook into schemas, templates and taxonomy in your CMS – checked first, created in the right order, logged for audit.</p>
+    </div>
+</section>
+<div class="start-cards">
+    <article class="cms-card">
+        <div class="cms-card__top">
+            <h2>Tridion Sites</h2>
+            <span class="cms-card__status cms-card__status--ready">Full support</span>
+        </div>
+        <p class="muted">Tridion Sites 10 with DXA, through the Core Service.</p>
+        <ul>
+            <li>Schemas, embedded and region schemas, categories and keywords</li>
+            <li>Component and Page Templates cloned from your DXA base templates</li>
+            <li>Export an existing content model back to a workbook</li>
+        </ul>
+        <form asp-action="Choose" method="post">
+            <input type="hidden" name="cms" value="tridion" />
+            <button class="btn btn--primary" type="submit">Continue with Tridion</button>
+        </form>
+    </article>
+    <article class="cms-card">
+        <div class="cms-card__top">
+            <h2>Adobe Experience Manager</h2>
+            <span class="cms-card__status">Preview</span>
+        </div>
+        <p class="muted">AEM as a Cloud Service or AEM 6.5 author.</p>
+        <ul>
+            <li>Connect and validate your workbook against AEM</li>
+            <li>See how schemas map to Content Fragment Models, tags and template policies</li>
+            <li>Creating them in AEM is the next release</li>
+        </ul>
+        <form asp-action="Choose" method="post">
+            <input type="hidden" name="cms" value="aem" />
+            <button class="btn" type="submit">Continue with AEM</button>
+        </form>
+    </article>
+</div>
+<p class="start-note">Not sure what goes in the workbook? <a asp-controller="Sample" asp-action="Template">Download the sample IA workbook</a> – it explains every column.</p>

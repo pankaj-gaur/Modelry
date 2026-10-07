@@ -1,0 +1,62 @@
+@model DryRunViewModel
+@{
+    Layout = "_WizardLayout";
+    ViewData["Title"] = "Check schemas";
+    ViewData["Step"] = "schemas";
+    var errors = Model.Plan.Issues.Count(i => i.Level == IssueLevel.Error);
+    var warnings = Model.Plan.Issues.Count(i => i.Level == IssueLevel.Warning);
+    var toCreate = Model.Plan.Schemas.Count(s => s.Action == PlanAction.Create);
+    var skipped = Model.Plan.Schemas.Count(s => s.Action == PlanAction.Skip);
+}
+<div class="step-head">
+    <span class="step-no">Step 4 of 6, check</span>
+    <h1>@(errors == 0 ? $"Ready to create {toCreate} schemas" : $"{errors} problem{(errors == 1 ? "" : "s")} to fix first")</h1>
+    <p class="lead">Checked @Model.FileName against <b>@Model.PublicationTitle / @Model.FolderTitle</b>. Nothing has been changed yet.</p>
+</div>
+<div class="tally">
+    <span><b>@toCreate</b> to create</span>
+    <span><b>@skipped</b> already exist</span>
+    <span><b>@Model.Plan.FoldersToCreate.Count</b> new folders</span>
+    <span><b>@(Model.Plan.Categories.Count(c => c.Action == PlanAction.Create) + Model.Plan.Keywords.Count(k => k.Action == PlanAction.Create))</b> categories and keywords</span>
+</div>
+
+@if (errors == 0)
+{
+    <form asp-action="Execute" method="post" class="actions" style="margin-top:0" onsubmit="var b=this.querySelector('button');b.disabled=true;b.textContent='Starting…';">
+        <input type="hidden" name="uploadId" value="@Model.UploadId" />
+        <input type="hidden" name="fileName" value="@Model.FileName" />
+        <input type="hidden" name="folderId" value="@Model.FolderId" />
+        <input type="hidden" name="checkJobId" value="@Model.CheckJobId" />
+        <button type="submit" class="btn btn--primary">Create @toCreate schemas</button>
+        <a class="btn btn--quiet" asp-controller="Wizard" asp-action="Schemas">Choose another folder</a>
+        <label class="check small" style="flex-basis:100%">
+            <input type="checkbox" name="recheck" value="true" />
+            <span>Check the publication again before creating<br /><span class="muted">Only needed if others are changing it right now. Otherwise Modelry uses this check for the next 30 minutes, and anything created by someone else meanwhile is skipped and reported.</span></span>
+        </label>
+    </form>
+}
+else
+{
+    <div class="alert alert--error" role="alert"><p>Fix the rows listed below in the workbook, upload it again in step 3, and run the check again.</p></div>
+    <div class="actions" style="margin-top:0"><a class="btn btn--primary" asp-controller="Wizard" asp-action="Upload">Upload a corrected workbook</a></div>
+}
+
+<h2 class="section-title">Findings</h2>
+<partial name="_Issues" model="Model.Plan.Issues" />
+
+<h2 class="section-title">Creation order</h2>
+<p class="muted">Everything an item refers to is created before it. References that loop back are added right after.</p>
+<div class="table-wrap">
+    <table class="data">
+        <thead><tr><th>#</th><th>Item</th><th>Needs first</th><th>Added afterwards</th></tr></thead>
+        <tbody>
+        @{ var n = 0; }
+        @foreach (var s in Model.Plan.CreationOrder)
+        {
+            n++;
+            <tr><td>@n</td><td>@s.Label</td><td>@(s.DependsOn.Count == 0 ? "–" : string.Join("; ", s.DependsOn.Select(d => d.Contains(": ") ? d[(d.IndexOf(": ") + 2)..] : d)))</td><td>@string.Join("; ", s.Deferred)</td></tr>
+        }
+        </tbody>
+    </table>
+</div>
+@section Scripts { <script src="~/js/issues.js" asp-append-version="true"></script> }
