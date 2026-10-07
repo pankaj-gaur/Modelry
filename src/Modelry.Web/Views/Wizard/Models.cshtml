@@ -1,0 +1,161 @@
+@model ModelsViewModel
+@using Modelry.Core.CodeGen
+@{
+    Layout = "_WizardLayout";
+    ViewData["Title"] = "Create models";
+    ViewData["Step"] = "models";
+    var d = Model.Wizard;
+    var p = Model.Plan;
+}
+<div class="step-head">
+    <span class="step-no">Step 6 of 7</span>
+    <h1>Create DXA models</h1>
+    @if (Model.IsAem)
+    {
+        <p class="lead">For AEM, Sling Models and HTL arrive in a later release. Your workbook mapping is ready on the earlier steps.</p>
+    }
+    else
+    {
+        <p class="lead">Modelry writes one C# view model per schema and the view registration for your DXA module, straight from the workbook. Nothing in the CMS is read or changed, so you can do this before, after or without creating schemas and templates.</p>
+    }
+</div>
+
+@if (Model.IsAem)
+{
+    <div class="actions" style="margin-top:0"><a class="btn btn--primary" asp-action="Finish">Continue to finish</a></div>
+}
+else if (Model.ReadError is not null || p is null)
+{
+    <div class="alert alert--error" role="alert"><p>@(Model.ReadError ?? "The workbook could not be read.")</p></div>
+    <div class="actions" style="margin-top:0"><a class="btn btn--primary" asp-action="Upload">Upload the workbook</a></div>
+}
+else
+{
+    var skippedCount = p.Skipped.Count;
+    var builtIn = p.Registrations.Count(r => r.ModelType is "PageModel" or "RegionModel");
+    @if (d.ModelRun is { ResultId: not null } run)
+    {
+        <div class="alert alert--info" role="status"><div>
+            <p><b>@run.Classes model classes and @run.Registrations registrations generated</b> in <code>@run.Namespace</code>, @run.FinishedUtc.ToLocalTime().ToString("d MMM, HH:mm")@(run.Warnings > 0 ? $" – {run.Warnings} warnings, listed in the README" : "").</p>
+            <p class="actions" style="margin-top:12px">
+                <a class="btn btn--primary" asp-controller="Models" asp-action="Download" asp-route-id="@run.ResultId">Download models (.zip)</a>
+                <a class="btn" asp-action="Finish">Continue to finish</a>
+            </p>
+            <p class="small muted">The zip is kept for 2 hours. Generating again replaces it.</p>
+        </div></div>
+    }
+
+    <div class="card">
+        <dl class="counts" style="border-top:0;margin-top:0">
+            <div><dt>Model classes</dt><dd>@p.Classes.Count<small>@string.Join(", ", p.Classes.GroupBy(c => c.Kind).OrderBy(g => g.Key).Select(g => $"{g.Count()} {g.Key.ToString().ToLower()}"))</small></dd></div>
+            <div><dt>View registrations</dt><dd>@(p.Registrations.Count + p.ModelOnlyRegistrations.Count)<small>@p.Registrations.Count views@(builtIn > 0 ? $" ({builtIn} with DXA's own model)" : ""), @p.ModelOnlyRegistrations.Count without a view</small></dd></div>
+            <div><dt>Schemas without a class</dt><dd>@skippedCount<small>Listed below with the reason</small></dd></div>
+            <div><dt>Target</dt><dd style="font-size:1.1rem">DXA .NET 2.3<small>C# 7.3, .NET Framework 4.6.2+</small></dd></div>
+        </dl>
+    </div>
+
+    <form asp-controller="Models" asp-action="Generate" method="post">
+        <h2 class="section-title">Settings</h2>
+        <div class="row">
+            <div class="field">
+                <label for="rootNamespace">Namespace</label>
+                <input id="rootNamespace" name="rootNamespace" value="@Model.Namespace" required pattern="[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*" />
+                <span class="hint">Every model class goes in this namespace. The area registration uses it without “.Models”.</span>
+            </div>
+            <div class="field">
+                <label for="pageMetadataSchema">Page metadata schema</label>
+                <select id="pageMetadataSchema" name="pageMetadataSchema">
+                    <option value="" selected="@(Model.PageMetadataSchema is null)">None – use DXA's PageModel</option>
+                    @foreach (var s in Model.MetadataSchemas)
+                    {
+                        <option value="@s" selected="@(IaWorkbook.Same(s, Model.PageMetadataSchema))">@s</option>
+                    }
+                </select>
+                <span class="hint">Its fields become typed properties of the page model registered for every Page Template.</span>
+            </div>
+        </div>
+        <details>
+            <summary class="btn btn--quiet btn--small">Advanced</summary>
+            <div class="field" style="margin-top:12px;max-width:420px">
+                <label for="semanticPrefix">Semantic prefix</label>
+                <input id="semanticPrefix" name="semanticPrefix" value="@Model.SemanticPrefix" placeholder="@p.SemanticPrefix" pattern="[A-Za-z][A-Za-z0-9]*" />
+                <span class="hint">Used in [SemanticProperty("@p.SemanticPrefix:fieldName")]. Leave empty for “@p.SemanticPrefix”.</span>
+            </div>
+        </details>
+        <div class="actions">
+            @if (p.HasErrors)
+            {
+                <button class="btn btn--primary" type="submit" disabled>Generate @p.Classes.Count models</button>
+                <span class="small muted">Fix the errors under Findings first.</span>
+            }
+            else
+            {
+                <button class="btn btn--primary" type="submit">@(d.ModelRun is null ? $"Generate {p.Classes.Count} models" : "Generate again")</button>
+            }
+            <a class="btn btn--quiet" asp-action="Finish">Skip to finish</a>
+        </div>
+    </form>
+
+    @if (p.Issues.Count > 0)
+    {
+        <h2 class="section-title">Findings</h2>
+        <partial name="_Issues" model="p.Issues" />
+    }
+
+    <h2 class="section-title">Model classes</h2>
+    <div class="table-wrap">
+        <table class="data">
+            <thead><tr><th>Class</th><th>Schema</th><th>Base type</th><th>Properties</th><th>Registered views</th></tr></thead>
+            <tbody>
+            @foreach (var c in p.Classes)
+            {
+                var views = p.Registrations.Where(r => r.ModelType == c.Name).Select(r => r.View).ToList();
+                <tr>
+                    <td><b>@c.Name</b><br /><span class="muted small">@c.FilePath</span></td>
+                    <td>@c.Schema.Title<br /><span class="muted small">@c.Schema.Purpose</span></td>
+                    <td>@c.BaseType</td>
+                    <td>@c.Properties.Count</td>
+                    <td>@(views.Count > 0 ? string.Join(", ", views) : p.ModelOnlyRegistrations.Contains(c.Name) ? "Registered without a view" : "–")</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+
+    @if (p.Registrations.Count > 0)
+    {
+        <details style="margin-top:24px">
+            <summary class="btn btn--quiet">All view registrations (@p.Registrations.Count)</summary>
+            <div class="table-wrap" style="margin-top:12px">
+                <table class="data">
+                    <thead><tr><th>View</th><th>Controller</th><th>Model</th><th>From</th></tr></thead>
+                    <tbody>
+                    @foreach (var r in p.Registrations)
+                    {
+                        <tr><td>@r.Area:@r.View</td><td>@(r.Controller ?? "–")</td><td>@r.ModelType</td><td class="muted small">@r.Source</td></tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </details>
+    }
+
+    @if (skippedCount > 0)
+    {
+        <details style="margin-top:12px">
+            <summary class="btn btn--quiet">Schemas without a class (@skippedCount)</summary>
+            <div class="table-wrap" style="margin-top:12px">
+                <table class="data">
+                    <thead><tr><th>Schema</th><th>Why</th></tr></thead>
+                    <tbody>
+                    @foreach (var s in p.Skipped)
+                    {
+                        <tr><td>@s.Schema.Title<br /><span class="muted small">@s.Schema.Purpose</span></td><td>@s.Reason</td></tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </details>
+    }
+}
+@section Scripts { <script src="~/js/issues.js" asp-append-version="true"></script> }

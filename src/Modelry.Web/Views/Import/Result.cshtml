@@ -7,7 +7,7 @@
     var what = Model.What.ToLower();
 }
 <div class="step-head">
-    <span class="step-no">@(Model.What == "Templates" ? "Step 5 of 6" : "Step 4 of 6"), done</span>
+    <span class="step-no">@(Model.What == "Templates" ? "Step 5 of 7" : "Step 4 of 7"), done</span>
     <h1>@(r.Cancelled ? $"Stopped – {r.Created} {what} created" : r.Failed > 0 ? $"{r.Created} {what} created, {r.Failed} need attention" : $"{r.Created} {what} created")</h1>
     <p class="lead">In @Model.FolderTitle. @(r.Skipped > 0 ? $"{r.Skipped} already existed and were left unchanged." : "")</p>
 </div>
@@ -21,8 +21,12 @@ else if (r.Failed > 0)
 }
 <div class="tally"><span><b>@r.Created</b> created</span><span><b>@r.Skipped</b> skipped</span><span><b>@r.Failed</b> failed</span></div>
 <div class="actions" style="margin-top:0">
-    @if (Model.What == "Templates") { <a class="btn btn--primary" asp-controller="Wizard" asp-action="Finish">Continue to finish</a> }
-    else { <a class="btn btn--primary" asp-controller="Wizard" asp-action="Templates">Continue to create templates</a> }
+    @if (Model.What == "Templates") { <a class="btn btn--primary" asp-controller="Wizard" asp-action="Models">Create models</a> }
+    else
+    {
+        <a class="btn btn--primary" asp-controller="Wizard" asp-action="Templates">Continue to create templates</a>
+        <a class="btn btn--primary" asp-controller="Wizard" asp-action="Models">Create models</a>
+    }
     <a class="btn" asp-action="Results" asp-route-id="@Model.ResultId">Download log (.xlsx)</a>
 </div>
 <h2 class="section-title">Log</h2>

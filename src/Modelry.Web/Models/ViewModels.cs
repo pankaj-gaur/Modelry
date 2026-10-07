@@ -90,3 +90,15 @@ public static class IssueCss
 {
     public static string Of(IssueLevel l) => l switch { IssueLevel.Error => "err", IssueLevel.Warning => "warn", _ => "info" };
 }
+
+public sealed class ModelsViewModel
+{
+    public required Modelry.Web.Services.WizardData Wizard { get; init; }
+    public bool IsAem { get; init; }
+    public Modelry.Core.CodeGen.ModelPlan? Plan { get; set; }
+    public string Namespace { get; set; } = "";
+    public string? PageMetadataSchema { get; set; }
+    public string? SemanticPrefix { get; set; }
+    public List<string> MetadataSchemas { get; set; } = new();
+    public string? ReadError { get; set; }
+}

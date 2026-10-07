@@ -8,7 +8,7 @@
 @Html.AntiForgeryToken()
 <div id="job" data-id="@Model.Id" data-mode="@Model.Mode">
     <div class="step-head">
-        <span class="step-no">@(Model.What == "Templates" ? "Step 5 of 6" : "Step 4 of 6"), @verb.ToLower()</span>
+        <span class="step-no">@(Model.What == "Templates" ? "Step 5 of 7" : "Step 4 of 7"), @verb.ToLower()</span>
         <h1 id="headline">@verb @Model.What.ToLower()</h1>
         @if (Model.IsCheck)
         {

@@ -1,12 +1,15 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Modelry.Core.CodeGen;
 using Modelry.Core.Excel;
+using Modelry.Core.Model;
 using Modelry.Tridion;
+using Modelry.Web.Models;
 using Modelry.Web.Services;
 
 namespace Modelry.Web.Controllers;
 
-/// <summary>The guided journey: upload the IA once, then create schemas, then templates.</summary>
+/// <summary>The guided journey: upload the IA once, then create schemas, then templates, then generate DXA models.</summary>
 public sealed class WizardController : Controller
 {
     private readonly WizardState _wizard;
@@ -49,7 +52,7 @@ public sealed class WizardController : Controller
             _wizard.Update(d =>
             {
                 d.UploadId = id; d.FileName = file.FileName; d.UploadedUtc = DateTime.UtcNow; d.Summary = summary;
-                d.SchemaRun = null; d.TemplateRun = null;
+                d.SchemaRun = null; d.TemplateRun = null; d.ModelRun = null; d.ModelSettings = null;
             });
             _log.LogInformation("AUDIT {Who} uploaded IA '{File}' ({Schemas} schemas, {Templates} templates)", _session.Who, file.FileName,
                 summary.Schemas, summary.ComponentTemplates + summary.PageTemplates);
@@ -71,6 +74,34 @@ public sealed class WizardController : Controller
 
     [HttpGet]
     public IActionResult Templates() => _wizard.Data.HasIa ? View(_wizard.Data) : RedirectToAction(nameof(Upload));
+
+    /// <summary>Models step: previews the classes and view registrations the workbook produces (no CMS calls).</summary>
+    [HttpGet]
+    public async Task<IActionResult> Models()
+    {
+        var d = _wizard.Data;
+        if (!d.HasIa) return RedirectToAction(nameof(Upload));
+        var vm = new ModelsViewModel { Wizard = d, IsAem = _session.IsAem };
+        if (vm.IsAem) return View(vm);
+        try
+        {
+            IaWorkbook wb;
+            await using (var stream = _uploads.Open(d.UploadId!)) (wb, _) = IaExcelReader.Read(stream, schemasRequired: false);
+            vm.MetadataSchemas = wb.Schemas.Where(s => s.Purpose == IaSchemaPurpose.Metadata).Select(s => s.Title).ToList();
+            var settings = d.ModelSettings ?? new ModelSettings
+            {
+                Namespace = ModelPlanner.SuggestNamespace(wb),
+                PageMetadataSchema = ModelsController.SuggestPageMetadata(wb)
+            };
+            vm.Namespace = settings.Namespace ?? ModelPlanner.SuggestNamespace(wb);
+            vm.PageMetadataSchema = settings.PageMetadataSchema;
+            vm.SemanticPrefix = settings.SemanticPrefix;
+            vm.Plan = ModelPlanner.Build(wb, ModelsController.Options(d, vm.Namespace, vm.PageMetadataSchema, vm.SemanticPrefix));
+        }
+        catch (FileNotFoundException) { vm.ReadError = "The uploaded workbook is no longer available. Upload it again."; }
+        catch (Exception ex) { _log.LogWarning(ex, "Model preview failed"); vm.ReadError = $"The workbook could not be read: {ex.Message}"; }
+        return View(vm);
+    }
 
     [HttpGet]
     public IActionResult Finish() => _wizard.Data.HasIa ? View(_wizard.Data) : RedirectToAction(nameof(Upload));

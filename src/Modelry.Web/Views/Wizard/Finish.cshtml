@@ -6,8 +6,8 @@
     ViewData["Step"] = "finish";
 }
 <div class="step-head">
-    <span class="step-no">Step 6 of 6</span>
-    <h1>@(Model.SchemaRun is not null || Model.TemplateRun is not null ? "Your content model is in place" : "Nothing created yet")</h1>
+    <span class="step-no">Step 7 of 7</span>
+    <h1>@(Model.SchemaRun is not null || Model.TemplateRun is not null || Model.ModelRun is not null ? "Your content model is in place" : "Nothing created yet")</h1>
     <p class="lead">@(Cms.IsAem ? "AEM creation arrives in the next release. Your workbook is validated and its AEM mapping is ready." : "Here's what Modelry created from " + Model.FileName + ". Download the logs for your audit trail.")</p>
 </div>
 @foreach (var (title, run, step) in new[] { ("Schemas", Model.SchemaRun, "Schemas"), ("Templates", Model.TemplateRun, "Templates") })
@@ -27,9 +27,27 @@
         }
     </div>
 }
+<div class="card">
+    <h2>DXA models</h2>
+    @if (Cms.IsAem)
+    {
+        <p class="muted" style="margin-top:8px">Sling Models for AEM arrive in a later release.</p>
+    }
+    else if (Model.ModelRun is not { } models)
+    {
+        <p class="muted" style="margin-top:8px">Not generated in this session.</p>
+        <a class="btn btn--small" asp-action="Models">Go to models</a>
+    }
+    else
+    {
+        <p class="muted" style="margin-top:4px">In @models.Namespace, @models.FinishedUtc.ToLocalTime().ToString("d MMM, HH:mm")</p>
+        <div class="tally"><span><b>@models.Classes</b> classes</span><span><b>@models.Registrations</b> registrations</span><span><b>@models.Warnings</b> warnings</span></div>
+        @if (models.ResultId is not null) { <a class="btn btn--small" asp-controller="Models" asp-action="Download" asp-route-id="@models.ResultId">Download models (.zip)</a> }
+    }
+</div>
 <h2 class="section-title">Next steps</h2>
 <ul class="lead" style="padding-left:1.1em">
-    <li>Publish a test page with each Page Template to check the DXA views.</li>
+    <li>Add the generated models to your DXA module, build, then publish a test page with each Page Template to check the views.</li>
     <li>Ask the front-end team to confirm the template-to-component list in the workbook.</li>
     <li>Run Modelry against the next environment with the same workbook – existing items are skipped.</li>
 </ul>
@@ -37,3 +55,12 @@
     <a class="btn" asp-action="Upload">Use another workbook</a>
     @if (!Cms.IsAem) { <a class="btn btn--quiet" asp-controller="Export" asp-action="Index">Export a model from the CMS</a> }
 </div>
+<details class="start-over">
+    <summary class="btn btn--primary">Start again with a new CMS</summary>
+    <div class="alert alert--warn" role="status" style="margin-top:16px"><div>
+        <p>This signs you out of @Cms.CmsName and clears the uploaded workbook and this session's results. Download any logs or models you still need first.</p>
+        <form asp-controller="Account" asp-action="ChangeCms" method="post" class="actions" style="margin-top:12px">
+            <button class="btn btn--primary" type="submit">Sign out and choose a CMS</button>
+        </form>
+    </div></div>
+</details>

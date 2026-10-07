@@ -111,6 +111,8 @@ public sealed class IaTemplate
     /// <summary>Comma-separated name:value pairs, e.g. "navType:Top".</summary>
     public string? RouteValues { get; set; }
     public string? HtmlClasses { get; set; }
+    /// <summary>Optional C# view model class for the DXA view (column 'View Model Type'); empty = derived from the linked schema.</summary>
+    public string? ViewModelType { get; set; }
     /// <summary>Component Templates: linked (related) schemas, by title or path/title.</summary>
     public List<string> LinkedSchemas { get; set; } = new();
     /// <summary>Page Templates: page (region) schema, by title or path/title.</summary>
@@ -128,9 +130,23 @@ public sealed class IaTemplate
     public int Row { get; set; }
 }
 
+/// <summary>A DXA region view documented in the Templates sheet as a reference row ("(reference – region view)"); used for model registration only.</summary>
+public sealed class IaRegionView
+{
+    public string Title { get; set; } = "";
+    /// <summary>Area-qualified view name, e.g. "Sabic:Main".</summary>
+    public string View { get; set; } = "";
+    /// <summary>Region schema the view renders (read from the Page Schema column).</summary>
+    public string? RegionSchema { get; set; }
+    public string? ViewModelType { get; set; }
+    public int Row { get; set; }
+}
+
 public sealed class IaWorkbook
 {
     public List<IaTemplate> Templates { get; } = new();
+    /// <summary>Region views listed as reference rows in the Templates sheet (not created in the CMS).</summary>
+    public List<IaRegionView> RegionViews { get; } = new();
     /// <summary>Sheet names found in the workbook (for diagnostics).</summary>
     public List<string> SheetNames { get; } = new();
     /// <summary>Where the templates were read from: the 'Templates' sheet, a legacy reference sheet, or null (none).</summary>

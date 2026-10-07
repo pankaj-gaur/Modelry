@@ -286,3 +286,11 @@ table.data tr.is-skip td { color: var(--cb-muted); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ---------------------------------------------------------------- disclosures (Advanced, registrations, start over) */
+details > summary { list-style: none; display: inline-flex; cursor: pointer; }
+details > summary::-webkit-details-marker { display: none; }
+details > summary.btn--quiet::after { content: "▸"; margin-left: 8px; transition: transform .15s; }
+details[open] > summary.btn--quiet::after { transform: rotate(90deg); }
+.start-over { margin-top: var(--s5); }
+code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .9em; background: var(--cb-surface, #f5f4f0); padding: 1px 5px; border-radius: 4px; }

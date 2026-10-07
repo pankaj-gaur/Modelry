@@ -36,6 +36,8 @@ public static class IaFormat
         public const string Includes = "Includes";
         public const string Description = "Description";
         public const string SourceId = "Source TCM URI (export only)";
+        /// <summary>Optional, read by model generation only (not written on export).</summary>
+        public const string ViewModelType = "View Model Type";
         public static readonly string[] All = { Type, Title, RelativePath, View, Controller, Action, RouteValues, HtmlClasses, LinkedSchemas, PageSchema, Dynamic, Priority, BaseTemplate, Includes, Description, SourceId };
     }
 

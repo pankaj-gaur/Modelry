@@ -10,7 +10,7 @@
 }
 @Html.AntiForgeryToken()
 <div class="step-head">
-    <span class="step-no">Step 5 of 6</span>
+    <span class="step-no">Step 5 of 7</span>
     <h1>Create templates</h1>
     @if (Cms.IsAem)
     {
@@ -34,7 +34,10 @@ else if (total > 0)
 {
     @if (Model.TemplateRun is { } run)
     {
-        <div class="alert alert--info" role="status"><p>Last run in <b>@run.FolderPath</b>: @run.Created created, @run.Skipped skipped@(run.Failed > 0 ? $", {run.Failed} failed" : ""). Running again skips templates that already exist.</p></div>
+        <div class="alert alert--info" role="status"><div>
+            <p>Last run in <b>@run.FolderPath</b>: @run.Created created, @run.Skipped skipped@(run.Failed > 0 ? $", {run.Failed} failed" : ""). Running again skips templates that already exist.</p>
+            <p><a class="btn btn--primary" asp-action="Models">Create models</a></p>
+        </div></div>
     }
     <form asp-controller="Templates" asp-action="DryRun" method="post" data-needs-folder>
         <h2 class="section-title" style="margin-top:0">1. Where should they be created?</h2>
@@ -77,12 +80,12 @@ else if (total > 0)
 
         <div class="actions">
             <button class="btn btn--primary" type="submit" disabled data-busy="Starting the check…">Check templates</button>
-            <a class="btn btn--quiet" asp-action="Finish">Skip to finish</a>
+            <a class="btn btn--quiet" asp-action="Models">Skip to model creation</a>
         </div>
     </form>
 }
 else
 {
-    <div class="actions"><a class="btn btn--primary" asp-action="Finish">Finish</a><a class="btn btn--quiet" asp-action="Upload">Upload a new workbook</a></div>
+    <div class="actions"><a class="btn btn--primary" asp-action="Models">Create models</a><a class="btn btn--quiet" asp-action="Upload">Upload a new workbook</a></div>
 }
 @section Scripts { <script src="~/js/picker.js" asp-append-version="true"></script> }

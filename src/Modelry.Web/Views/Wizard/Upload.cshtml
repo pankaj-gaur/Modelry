@@ -8,7 +8,7 @@
 }
 @Html.AntiForgeryToken()
 <div class="step-head">
-    <span class="step-no">Step 3 of 6</span>
+    <span class="step-no">Step 3 of 7</span>
     <h1>@(Model.HasIa ? "Your Information Architecture" : "Upload your Information Architecture")</h1>
     <p class="lead">@(Model.HasIa ? "Modelry uses this workbook for every step that follows. Replace it any time – the steps reset." : "One workbook describes everything: schemas, fields, regions, templates and taxonomy. You upload it once; every following step uses it.")</p>
 </div>
@@ -49,7 +49,7 @@
     }
     <div class="actions">
         <a class="btn btn--primary" asp-action="Schemas">Create schemas</a>
-        <a class="btn" asp-action="Templates">Create templates</a>
+        <a class="btn btn--primary" asp-action="Templates">Create templates</a>
         <details>
             <summary class="btn btn--quiet">Replace workbook</summary>
             <form asp-action="Upload" method="post" enctype="multipart/form-data" class="replace" style="margin-top:12px">

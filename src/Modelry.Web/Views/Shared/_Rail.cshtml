@@ -14,7 +14,9 @@
             Cms.IsAem ? "Mapping preview" : d.SchemaRun is null ? $"{d.Summary?.Schemas ?? 0} in the workbook" : Run(d.SchemaRun), (d.SchemaRun?.Failed ?? 0) > 0),
         ("templates", "Templates", d.TemplateRun is not null, "Wizard", "Templates", d.HasIa,
             Cms.IsAem ? "Mapping preview" : d.TemplateRun is null ? $"{(d.Summary?.ComponentTemplates ?? 0) + (d.Summary?.PageTemplates ?? 0)} in the workbook" : Run(d.TemplateRun), (d.TemplateRun?.Failed ?? 0) > 0),
-        ("finish", "Finish", d.SchemaRun is not null && d.TemplateRun is not null, "Wizard", "Finish", d.HasIa, "Results and next steps", false),
+        ("models", "Models", d.ModelRun is not null, "Wizard", "Models", d.HasIa,
+            Cms.IsAem ? "Next release" : d.ModelRun is null ? "DXA C# view models" : $"{d.ModelRun.Classes} classes, {d.ModelRun.Registrations} registrations", false),
+        ("finish", "Finish", d.SchemaRun is not null && d.TemplateRun is not null && d.ModelRun is not null, "Wizard", "Finish", d.HasIa, "Results and next steps", false),
     };
 }
 <ol>

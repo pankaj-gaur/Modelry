@@ -15,6 +15,7 @@ public sealed class HomeController : Controller
         if (!d.HasIa) return RedirectToAction("Upload", "Wizard");
         if (d.SchemaRun is null) return RedirectToAction("Schemas", "Wizard");
         if (d.TemplateRun is null) return RedirectToAction("Templates", "Wizard");
+        if (d.ModelRun is null) return RedirectToAction("Models", "Wizard");
         return RedirectToAction("Finish", "Wizard");
     }
 

@@ -14,6 +14,28 @@ public sealed class RunSummary
     public DateTime FinishedUtc { get; set; }
 }
 
+/// <summary>Outcome of a model generation run (DXA C# view models zip).</summary>
+public sealed class ModelRunSummary
+{
+    public int Classes { get; set; }
+    public int Registrations { get; set; }
+    public int Files { get; set; }
+    public int Warnings { get; set; }
+    public string Namespace { get; set; } = "";
+    public string FileName { get; set; } = "";
+    /// <summary>Cache key of the zip (kept for 2 hours).</summary>
+    public string? ResultId { get; set; }
+    public DateTime FinishedUtc { get; set; }
+}
+
+/// <summary>Choices made on the Models step, remembered for the session.</summary>
+public sealed class ModelSettings
+{
+    public string? Namespace { get; set; }
+    public string? PageMetadataSchema { get; set; }
+    public string? SemanticPrefix { get; set; }
+}
+
 /// <summary>What the uploaded IA workbook contains.</summary>
 public sealed class IaSummary
 {
@@ -43,6 +65,8 @@ public sealed class WizardData
     public string? TemplateFolderId { get; set; }
     public RunSummary? SchemaRun { get; set; }
     public RunSummary? TemplateRun { get; set; }
+    public ModelRunSummary? ModelRun { get; set; }
+    public ModelSettings? ModelSettings { get; set; }
     public bool HasIa => UploadId is not null;
 }
 

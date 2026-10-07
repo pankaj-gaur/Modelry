@@ -130,7 +130,18 @@ public static class IaExcelReader
             var title = row[IaFormat.Templates.Title];
             if (string.IsNullOrWhiteSpace(title)) continue;
             // Reference-only rows (e.g. "(reference – not created)") document templates the utility must not create.
-            if (row[IaFormat.Templates.Type].TrimStart().StartsWith("(")) continue;
+            // Region view rows are kept for model generation (view registration).
+            if (row[IaFormat.Templates.Type].TrimStart().StartsWith("("))
+            {
+                var view = NullIfEmpty(row[IaFormat.Templates.View]);
+                if (row[IaFormat.Templates.Type].Contains("region", StringComparison.OrdinalIgnoreCase) && view is not null && !view.StartsWith("("))
+                    wb.RegionViews.Add(new IaRegionView
+                    {
+                        Title = title.Trim(), View = view, RegionSchema = NullIfEmpty(row[IaFormat.Templates.PageSchema]),
+                        ViewModelType = NullIfEmpty(row[IaFormat.Templates.ViewModelType]), Row = row.Number
+                    });
+                continue;
+            }
             var typeText = row[IaFormat.Templates.Type].Replace(" ", "").ToLowerInvariant();
             IaTemplateKind kind;
             if (typeText is "componenttemplate" or "ct" or "component") kind = IaTemplateKind.ComponentTemplate;
@@ -151,6 +162,7 @@ public static class IaExcelReader
                 Action = NullIfEmpty(row[IaFormat.Templates.Action]),
                 RouteValues = NullIfEmpty(row[IaFormat.Templates.RouteValues]),
                 HtmlClasses = NullIfEmpty(row[IaFormat.Templates.HtmlClasses]),
+                ViewModelType = NullIfEmpty(row[IaFormat.Templates.ViewModelType]),
                 LinkedSchemas = IaVocabulary.SplitList(row[IaFormat.Templates.LinkedSchemas]),
                 PageSchema = NullIfEmpty(row[IaFormat.Templates.PageSchema]),
                 Dynamic = IaVocabulary.ParseYesNo(row[IaFormat.Templates.Dynamic]),

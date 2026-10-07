@@ -9,7 +9,7 @@
     var skipped = Model.Plan.Schemas.Count(s => s.Action == PlanAction.Skip);
 }
 <div class="step-head">
-    <span class="step-no">Step 4 of 6, check</span>
+    <span class="step-no">Step 4 of 7, check</span>
     <h1>@(errors == 0 ? $"Ready to create {toCreate} schemas" : $"{errors} problem{(errors == 1 ? "" : "s")} to fix first")</h1>
     <p class="lead">Checked @Model.FileName against <b>@Model.PublicationTitle / @Model.FolderTitle</b>. Nothing has been changed yet.</p>
 </div>
