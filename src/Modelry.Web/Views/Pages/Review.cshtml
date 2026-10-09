@@ -1,0 +1,161 @@
+@model PageReviewViewModel
+@using Modelry.Core.Pages
+@{
+    Layout = "_WizardLayout";
+    ViewData["Title"] = "Review sections";
+    ViewData["Step"] = "pages";
+    var a = Model.Analysis;
+    var run = Model.Run;
+    var pg = a.Page;
+    var mapped = a.Match.Sections.Count(s => !s.Excluded);
+    string Value(SectionMatch s) => s.Excluded ? "exclude" : s.Row is not null ? $"map:{s.Row.MapId}" : s.TemplateTitle is not null ? $"ct:{s.TemplateTitle}" : "exclude";
+    string? Asset(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url) || url.StartsWith("data:")) return null;
+        if (url.StartsWith("http://") || url.StartsWith("https://") || url.StartsWith("//")) return url;
+        var resolved = new Uri(new Uri("http://page/" + run.EntryPath), url).AbsolutePath.TrimStart('/');
+        return Model.PreviewBase + resolved;
+    }
+    string Badge(MatchConfidence c) => c switch
+    {
+        MatchConfidence.Explicit => "Named in HTML", MatchConfidence.High => "Strong match", MatchConfidence.Medium => "Likely match",
+        MatchConfidence.Low => "Weak match – check", _ => "No match"
+    };
+}
+<div class="step-head">
+    <span class="step-no">Step 7 of 8, review</span>
+    <h1>@pg.Label</h1>
+    <p class="lead">@a.Sections.Count sections found in @run.ZipName. Check which component each one becomes – the suggestion comes from this page's rows in the mapping sheet. Values and images are what Modelry read from the HTML.</p>
+</div>
+
+<div class="tally">
+    <span><b>@mapped</b> sections mapped</span>
+    <span><b>@(a.Sections.Count - mapped)</b> excluded</span>
+    <span><b>@a.Match.Unmatched.Count</b> mapping rows not found</span>
+    <span><b>@a.Ignored.Count</b> left out (header, footer, navigation…)</span>
+</div>
+
+@if (a.DuplicateRows.Count > 0)
+{
+    <div class="alert alert--warn" role="status"><p>@string.Join(", ", a.DuplicateRows) @(a.DuplicateRows.Count == 1 ? "is" : "are") chosen for more than one section. That's fine for repeated components; otherwise pick a different row for one of them.</p></div>
+}
+@if (a.Match.Unmatched.Count > 0)
+{
+    <div class="alert alert--info" role="status"><div>
+        <p><b>In the mapping but not found in this HTML:</b></p>
+        <ul class="small">@foreach (var r in a.Match.Unmatched) { <li>@r.MapId · @r.Region · @SectionMatcher.StripPrefix(r.ComponentTemplate ?? r.SchemaTitle ?? "") @(r.UiSection is null ? "" : "– " + r.UiSection)@(r.ContentSource is "Query" or "Integration" ? $" ({r.ContentSource})" : "")</li> }</ul>
+        <p class="small muted">If one of them is in the HTML, choose it for that section below.</p>
+    </div></div>
+}
+
+<form asp-action="Choose" asp-route-id="@run.Id" method="post">
+    <div class="sections">
+    @foreach (var s in a.Match.Sections)
+    {
+        var n = s.Section.Index;
+        var binding = a.Bindings.TryGetValue(n, out var b) ? b : null;
+        <div class="section-row @(s.Excluded ? "is-excluded" : "")">
+            <div class="thumb" data-thumb="@n">
+                <iframe sandbox="allow-scripts" loading="lazy" tabindex="-1" aria-hidden="true" title="Section @(n + 1)"
+                        src="@(Model.PreviewBase + run.EntryPath)?modelry-section=@n"></iframe>
+            </div>
+            <div class="section-row__map">
+                <span class="step-no">Section @(n + 1)</span>
+                <div class="section-row__label">@s.Section.Label</div>
+                <label class="sr-only" for="choice-@n">Component for section @(n + 1)</label>
+                <select id="choice-@n" name="choice[@n]">
+                    <option value="exclude" selected="@(Value(s) == "exclude")">Exclude – not a component</option>
+                    @foreach (var g in Model.Options.GroupBy(o => o.Group))
+                    {
+                        <optgroup label="@g.Key">
+                            @foreach (var o in g) { <option value="@o.Value" selected="@(o.Value == Value(s))">@o.Label</option> }
+                        </optgroup>
+                    }
+                </select>
+                @if (!s.Overridden) { <input type="hidden" name="suggested[@n]" value="@Value(s)" /> }
+                <p class="small" style="margin:8px 0 0">
+                    @if (s.Overridden) { <span class="pill pill--teal">Your choice</span> }
+                    else { <span class="pill @(s.Confidence >= MatchConfidence.High ? "pill--teal" : s.Confidence == MatchConfidence.Medium ? "" : "pill--amber")">@Badge(s.Confidence)</span> }
+                    @if (s.Region is not null && !s.Excluded) { <span class="muted">Region: @s.Region</span> }
+                </p>
+                @if (s.Reasons.Count > 0) { <p class="small muted" style="margin:6px 0 0">@string.Join(" ", s.Reasons)</p> }
+                @if (s.ItemSchemas.Count > 0 && !s.Excluded)
+                {
+                    <p class="small" style="margin:6px 0 0"><span class="muted">Items inside, per the mapping:</span> @string.Join(", ", s.ItemSchemas.Select(SectionMatcher.StripPrefix))</p>
+                }
+            </div>
+            <div class="section-row__fields">
+                @if (binding is null)
+                {
+                    <p class="small muted">@(s.Excluded ? "Not created." : "No fields could be read.")</p>
+                }
+                else
+                {
+                    <dl class="fields">
+                        @foreach (var f in binding.Fields)
+                        {
+                            <dt>@f.Field.Label</dt>
+                            <dd>
+                                @if (Asset(f.AssetUrl) is { } img && f.Kind is BindKind.ImageSrc or BindKind.Embedded && !Modelry.Core.Pages.FieldBinder.IsDocumentHref(f.AssetUrl))
+                                {
+                                    <img class="asset" src="@img" alt="" loading="lazy" />
+                                }
+                                <span>@f.Preview</span>
+                                @if (f.Items.Count > 0)
+                                {
+                                    <ul class="items">
+                                        @foreach (var item in f.Items.Take(6))
+                                        {
+                                            <li>@string.Join(" · ", item.Fields.Where(x => x.Preview is { Length: > 0 } && x.Kind != BindKind.LinkHref || x.Field.Type == Modelry.Core.Model.IaFieldType.ExternalLink).Select(x => FieldBinder.Short(x.Preview, 50)).Take(3))</li>
+                                        }
+                                    </ul>
+                                }
+                            </dd>
+                        }
+                    </dl>
+                    @if (binding.MissingMandatory.Count > 0)
+                    {
+                        <p class="small" style="margin:8px 0 0"><span class="pill pill--amber">Not in the HTML</span> @string.Join(", ", binding.MissingMandatory.Select(m => m.Label)) – mandatory, gets a [TBC] placeholder when the component is created.</p>
+                    }
+                }
+            </div>
+        </div>
+    }
+    </div>
+    <div class="actions">
+        <button class="btn" type="submit">Save choices</button>
+        <button class="btn btn--quiet" type="submit" name="reset" value="true">Back to suggestions</button>
+    </div>
+
+    @if (a.Ignored.Count > 0)
+    {
+        <details style="margin-top:16px">
+            <summary class="btn btn--quiet">Left out of the page (@a.Ignored.Count)</summary>
+            <ul class="small" style="margin-top:8px">@foreach (var i in a.Ignored) { <li><code>@i.Description</code> – @i.Reason</li> }</ul>
+        </details>
+    }
+
+    <h2 class="section-title" id="views">Razor views</h2>
+    <p class="muted">One view per Component Template used here, built from the generated model and this HTML: fields come from the model with XPM markup, repeated items become loops (slides and cards that are components get their own item view), fixed UI text becomes DXA resources and front-end assets use theme paths. Also the shared layout, the page view, region views, a helpers file and the resources to import. A template used for different markup gets a variant view.</p>
+    @if (Model.ViewsResult is { ViewsResultId: not null } vr)
+    {
+        <div class="alert alert--info" role="status"><div>
+            <p><b>@vr.Views views generated</b>, @vr.FinishedUtc.ToLocalTime().ToString("d MMM, HH:mm")@(vr.Findings > 0 ? $" – {vr.Findings} findings in the README" : "").</p>
+            <p class="actions" style="margin-top:12px"><a class="btn btn--primary" asp-action="DownloadViews" asp-route-rid="@vr.ViewsResultId">Download views (.zip)</a></p>
+        </div></div>
+    }
+    <div class="actions" style="margin-top:0">
+        <button class="btn btn--primary" type="submit" formaction="@Url.Action("Views", new { id = run.Id })" disabled="@(mapped == 0)">@(Model.ViewsResult is null ? "Generate DXA Views (.zip)" : "Generate DXA Views again")</button>
+        <a class="btn btn--quiet" asp-action="Index">Upload another page</a>
+        <a class="btn btn--quiet" asp-controller="Wizard" asp-action="Finish">Finish</a>
+    </div>
+    <p class="hint" style="margin-top:12px">Generating also saves the choices above.</p>
+
+    <h2 class="section-title" id="create">Create it in Tridion</h2>
+    <p class="muted">Images become multimedia components, each mapped section a component (slides and list items too), and the page goes into a Structure Group with every component in its region and template. You choose where, Modelry checks first, and nothing is published.</p>
+    <div class="actions" style="margin-top:0">
+        <button class="btn btn--primary" type="submit" formaction="@Url.Action("Choose", new { id = run.Id, next = "content" })" disabled="@(mapped == 0)">Create components and page</button>
+    </div>
+</form>
+
+@section Scripts { <script src="~/js/pages.js" asp-append-version="true"></script> }

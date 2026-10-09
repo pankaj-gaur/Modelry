@@ -1,0 +1,22 @@
+@model string
+@inject TridionSession Cms
+@*
+    The "go to a later step" buttons, the same on every page: Upload IA shows all four, Schemas the three after it,
+    Templates the two after it, DXA models the last one. DXA steps are Tridion-only, so AEM sees just the schema/template ones.
+*@
+@{
+    var from = Model;
+    var all = new (string Key, string Text, string Controller, string Action, bool Dxa)[]
+    {
+        ("schemas", "Create schemas", "Wizard", "Schemas", false),
+        ("templates", "Create templates", "Wizard", "Templates", false),
+        ("models", "Create DXA models", "Wizard", "Models", true),
+        ("pages", "Create DXA Views and Pages", "Pages", "Index", true),
+    };
+    var start = from switch { "ia" => 0, "schemas" => 1, "templates" => 2, "models" => 3, _ => 4 };
+    var buttons = all.Skip(start).Where(b => !(b.Dxa && Cms.IsAem)).ToList();
+}
+@foreach (var b in buttons)
+{
+    <a class="btn btn--primary" asp-controller="@b.Controller" asp-action="@b.Action">@b.Text</a>
+}

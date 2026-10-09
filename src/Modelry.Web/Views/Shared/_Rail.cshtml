@@ -3,7 +3,16 @@
 @{
     var d = Wizard.Data;
     var current = ViewData["Step"] as string ?? "";
-    string State(string key, bool done) => key == current ? "is-current" : done ? "is-done" : d.HasIa || key is "cms" or "connect" or "ia" ? "" : "is-locked";
+    // Steps 4–7 (Schemas … DXA page) that are not done but lie before the current or the furthest step opened were skipped.
+    var currentIndex = Array.IndexOf(StepTrackingFilter.Steps, current);
+    var reach = Math.Max(currentIndex, d.FurthestStep);
+    bool Skipped(string key, bool done)
+    {
+        var i = Array.IndexOf(StepTrackingFilter.Steps, key);
+        return d.HasIa && !done && key != current && i is >= 3 and <= 6 && i < reach && !(Cms.IsAem && key is "models" or "pages");
+    }
+    string State(string key, bool done) => key == current ? "is-current" : done ? "is-done" : Skipped(key, done) ? "is-skipped"
+        : d.HasIa || key is "cms" or "connect" or "ia" ? "" : "is-locked";
     string Run(RunSummary? r) => r is null ? "" : $"{r.Created} created, {r.Skipped} skipped";
     var steps = new (string Key, string Title, bool Done, string? Controller, string? Action, bool Linkable, string Meta, bool Bad)[]
     {
@@ -14,8 +23,10 @@
             Cms.IsAem ? "Mapping preview" : d.SchemaRun is null ? $"{d.Summary?.Schemas ?? 0} in the workbook" : Run(d.SchemaRun), (d.SchemaRun?.Failed ?? 0) > 0),
         ("templates", "Templates", d.TemplateRun is not null, "Wizard", "Templates", d.HasIa,
             Cms.IsAem ? "Mapping preview" : d.TemplateRun is null ? $"{(d.Summary?.ComponentTemplates ?? 0) + (d.Summary?.PageTemplates ?? 0)} in the workbook" : Run(d.TemplateRun), (d.TemplateRun?.Failed ?? 0) > 0),
-        ("models", "Models", d.ModelRun is not null, "Wizard", "Models", d.HasIa,
+        ("models", "DXA models", d.ModelRun is not null, "Wizard", "Models", d.HasIa,
             Cms.IsAem ? "Next release" : d.ModelRun is null ? "DXA C# view models" : $"{d.ModelRun.Classes} classes, {d.ModelRun.Registrations} registrations", false),
+        ("pages", "DXA Views and Pages", d.PageRuns.Count > 0, "Pages", "Index", d.HasIa,
+            Cms.IsAem ? "Next release" : d.PageRuns.Count == 0 ? "One page at a time, from its HTML" : $"{d.PageRuns.Count} {(d.PageRuns.Count == 1 ? "page" : "pages")}: {string.Join(", ", d.PageRuns.Select(p => p.PageId).Take(3))}{(d.PageRuns.Count > 3 ? "…" : "")}", false),
         ("finish", "Finish", d.SchemaRun is not null && d.TemplateRun is not null && d.ModelRun is not null, "Wizard", "Finish", d.HasIa, "Results and next steps", false),
     };
 }
@@ -25,7 +36,7 @@
         var s = steps[i];
         var state = State(s.Key, s.Done);
         <li class="@state" aria-current="@(state == "is-current" ? "step" : null)">
-            <span class="rail__dot" aria-hidden="true">@(s.Done && state != "is-current" ? "✓" : (i + 1).ToString())</span>
+            <span class="rail__dot" aria-hidden="true">@(s.Done && state != "is-current" ? "✓" : state == "is-skipped" ? "–" : (i + 1).ToString())</span>
             @if (s.Linkable && state != "is-current")
             {
                 <a class="rail__title" asp-controller="@s.Controller" asp-action="@s.Action">@s.Title</a>
@@ -35,6 +46,7 @@
                 <span class="rail__title">@s.Title</span>
             }
             <span class="rail__meta">
+                @if (state == "is-skipped") { <span class="skipped">Skipped · </span> }
                 @s.Meta
                 @if (s.Key == "schemas" && (d.SchemaRun?.Failed ?? 0) > 0) { <span class="bad">, @d.SchemaRun!.Failed failed</span> }
                 @if (s.Key == "templates" && (d.TemplateRun?.Failed ?? 0) > 0) { <span class="bad">, @d.TemplateRun!.Failed failed</span> }

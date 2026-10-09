@@ -53,6 +53,7 @@ public sealed class WizardController : Controller
             {
                 d.UploadId = id; d.FileName = file.FileName; d.UploadedUtc = DateTime.UtcNow; d.Summary = summary;
                 d.SchemaRun = null; d.TemplateRun = null; d.ModelRun = null; d.ModelSettings = null;
+                d.PageRuns = new(); d.ViewSources = new(StringComparer.OrdinalIgnoreCase); d.CurrentPageRunId = null; d.FurthestStep = 2;
             });
             _log.LogInformation("AUDIT {Who} uploaded IA '{File}' ({Schemas} schemas, {Templates} templates)", _session.Who, file.FileName,
                 summary.Schemas, summary.ComponentTemplates + summary.PageTemplates);

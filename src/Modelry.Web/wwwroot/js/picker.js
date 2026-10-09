@@ -18,6 +18,7 @@
     const meta = picker.querySelector('.picker__meta');
     const newBox = picker.querySelector('.picker__new');
     const form = picker.closest('form');
+    const sg = picker.dataset.mode === 'sg';
     let selected = null;
 
     function node(n, parentPath) {
@@ -36,6 +37,7 @@
       row.append(toggle, label); li.append(row);
       toggle.addEventListener('click', () => expand(li));
       label.addEventListener('click', () => n.type === 'Publication' ? expand(li) : select(li, n, label));
+      if (n.type === 'StructureGroup') label.classList.add('is-sg');
       return li;
     }
 
@@ -46,9 +48,9 @@
       if (ul) ul.remove();
       ul = el('ul'); ul.setAttribute('role', 'group'); ul.append(el('li', 'tree__empty', 'Loading…')); li.append(ul);
       try {
-        const kids = await api('/api/tree/children?id=' + encodeURIComponent(li.dataset.id));
+        const kids = await api('/api/tree/children?id=' + encodeURIComponent(li.dataset.id) + (sg ? '&mode=sg' : ''));
         ul.innerHTML = '';
-        if (!kids.length) { ul.append(el('li', 'tree__empty', 'No sub-folders')); toggle.disabled = true; return; }
+        if (!kids.length) { ul.append(el('li', 'tree__empty', sg ? 'No sub-Structure Groups' : 'No sub-folders')); toggle.disabled = true; return; }
         kids.forEach(k => ul.append(node(k, li.dataset.path)));
         toggle.disabled = false; toggle.setAttribute('aria-expanded', 'true');
         if (li.dataset.type === 'Publication' && kids.length === 1) expand(ul.firstChild);
@@ -63,10 +65,14 @@
       selectedText.textContent = li.dataset.path;
       meta.textContent = n.id;
       newBox.hidden = false;
-      if (form) form.querySelectorAll('button[type=submit]').forEach(b => b.disabled = false);
+      // A form with several pickers (e.g. folders + Structure Group) is ready only when every one has a choice.
+      if (form) {
+        const ready = Array.from(form.querySelectorAll('.picker__value')).every(v => v.value);
+        form.querySelectorAll('button[type=submit]').forEach(b => b.disabled = !ready);
+      }
       try {
-        const f = await api('/api/tree/folder?id=' + encodeURIComponent(n.id));
-        meta.textContent = f.schemaCount + ' schema' + (f.schemaCount === 1 ? '' : 's') + ' in this folder, ' + n.id;
+        const f = await api((sg ? '/api/tree/structure-group?id=' : '/api/tree/folder?id=') + encodeURIComponent(n.id));
+        meta.textContent = sg ? 'Structure Group in ' + f.publicationTitle + ', ' + n.id : f.schemaCount + ' schema' + (f.schemaCount === 1 ? '' : 's') + ' in this folder, ' + n.id;
         document.dispatchEvent(new CustomEvent('modelry:publication', { detail: { publicationId: f.publicationId } }));
       } catch (e) { meta.textContent = 'Could not read folder details: ' + e.message; }
     }
@@ -76,10 +82,10 @@
       if (!selected || !input.value.trim()) { input.focus(); return; }
       const btn = newBox.querySelector('button'); btn.disabled = true;
       try {
-        await api('/api/tree/folders', { method: 'POST', body: JSON.stringify({ parentId: selected.id, title: input.value.trim() }) });
+        await api(sg ? '/api/tree/structure-groups' : '/api/tree/folders', { method: 'POST', body: JSON.stringify({ parentId: selected.id, title: input.value.trim() }) });
         input.value = '';
         await expand(selected.li, true);
-      } catch (e) { alert('The folder was not created: ' + e.message); }
+      } catch (e) { alert((sg ? 'The Structure Group' : 'The folder') + ' was not created: ' + e.message); }
       finally { btn.disabled = false; }
     });
 

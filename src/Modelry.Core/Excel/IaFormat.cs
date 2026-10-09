@@ -41,6 +41,41 @@ public static class IaFormat
         public static readonly string[] All = { Type, Title, RelativePath, View, Controller, Action, RouteValues, HtmlClasses, LinkedSchemas, PageSchema, Dynamic, Priority, BaseTemplate, Includes, Description, SourceId };
     }
 
+    public const string PagesSheet = "Page Inventory";
+    public const string MappingSheet = "Page-Schema Mapping";
+
+    /// <summary>Optional sheet read by the Pages step only.</summary>
+    public static class Pages
+    {
+        public const string PageId = "Page ID";
+        public const string Site = "Site / Publication";
+        public const string Section = "Section (Structure Group)";
+        public const string PageName = "Page Name";
+        public const string ProposedUrl = "Proposed URL";
+        public const string PageSchema = "Page Schema";
+        public const string PageMetadataSchema = "Page Metadata Schema";
+        public const string PageTemplate = "Page Template";
+        public const string AutoRendered = "Auto-rendered by Page Template";
+        public static readonly string[] All = { PageId, Site, Section, PageName, ProposedUrl, PageSchema, PageMetadataSchema, PageTemplate, AutoRendered };
+    }
+
+    /// <summary>Optional sheet read by the Pages step only.</summary>
+    public static class Mapping
+    {
+        public const string MapId = "Map ID";
+        public const string PageId = "Page ID";
+        public const string Region = "Region";
+        public const string RegionSchema = "Region Schema";
+        public const string UiSection = "UI Section / Component";
+        public const string SpecIds = "Spec IDs";
+        public const string SchemaTitle = "Schema Title";
+        public const string ComponentTemplate = "Component Template";
+        public const string ContentSource = "Content Source";
+        public const string Notes = "Notes";
+        public const string ReuseGroup = "Reuse Group";
+        public static readonly string[] All = { MapId, PageId, Region, RegionSchema, UiSection, SpecIds, SchemaTitle, ComponentTemplate, ContentSource, Notes, ReuseGroup };
+    }
+
     public static class Schemas
     {
         public const string Title = "Schema Title*";

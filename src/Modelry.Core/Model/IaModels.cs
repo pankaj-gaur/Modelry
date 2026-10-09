@@ -130,6 +130,42 @@ public sealed class IaTemplate
     public int Row { get; set; }
 }
 
+/// <summary>A page in the Page Inventory sheet (optional; used by the Pages step).</summary>
+public sealed class IaPage
+{
+    public string PageId { get; set; } = "";
+    public string? Site { get; set; }
+    public string? Section { get; set; }
+    public string PageName { get; set; } = "";
+    public string? ProposedUrl { get; set; }
+    public string? PageSchema { get; set; }
+    public string? PageMetadataSchema { get; set; }
+    public string? PageTemplate { get; set; }
+    /// <summary>What the Page Template renders itself (e.g. "Breadcrumb / SectionTabs") – not authored components.</summary>
+    public string? AutoRendered { get; set; }
+    public int Row { get; set; }
+    public string Label => $"{PageId} – {PageName}";
+}
+
+/// <summary>One placement in the Page-Schema Mapping sheet: which component goes in which region of a page, in order.</summary>
+public sealed class IaMappingRow
+{
+    public string MapId { get; set; } = "";
+    public string PageId { get; set; } = "";
+    public string? Region { get; set; }
+    public string? RegionSchema { get; set; }
+    /// <summary>The section as named in the requirement specification, e.g. "Introductory statement".</summary>
+    public string? UiSection { get; set; }
+    public string? SpecIds { get; set; }
+    public string? SchemaTitle { get; set; }
+    public string? ComponentTemplate { get; set; }
+    /// <summary>Authored | Query | Integration | SG-driven …</summary>
+    public string? ContentSource { get; set; }
+    public string? Notes { get; set; }
+    public string? ReuseGroup { get; set; }
+    public int Row { get; set; }
+}
+
 /// <summary>A DXA region view documented in the Templates sheet as a reference row ("(reference – region view)"); used for model registration only.</summary>
 public sealed class IaRegionView
 {
@@ -147,6 +183,10 @@ public sealed class IaWorkbook
     public List<IaTemplate> Templates { get; } = new();
     /// <summary>Region views listed as reference rows in the Templates sheet (not created in the CMS).</summary>
     public List<IaRegionView> RegionViews { get; } = new();
+    /// <summary>Page Inventory rows (optional sheet).</summary>
+    public List<IaPage> Pages { get; } = new();
+    /// <summary>Page-Schema Mapping rows (optional sheet), in sheet order.</summary>
+    public List<IaMappingRow> Mapping { get; } = new();
     /// <summary>Sheet names found in the workbook (for diagnostics).</summary>
     public List<string> SheetNames { get; } = new();
     /// <summary>Where the templates were read from: the 'Templates' sheet, a legacy reference sheet, or null (none).</summary>

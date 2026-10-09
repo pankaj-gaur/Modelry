@@ -2,7 +2,7 @@ using Modelry.Core.Model;
 
 namespace Modelry.Core.Gateway;
 
-public enum NodeType { Publication, Folder }
+public enum NodeType { Publication, Folder, StructureGroup }
 
 public sealed record TreeNode(string Id, string Title, NodeType Type, bool HasChildren, int? SchemaCount = null);
 /// <param name="PathFromRoot">Folder path below the publication's root folder, '/'-separated ('.' = the root folder itself).</param>
@@ -125,6 +125,54 @@ public sealed class TemplateWriteModel
     public required TemplateFieldOptions Fields { get; init; }
 }
 
+// ---------------------------------------------------------------- content (Pages step)
+
+public enum ContentItemType { Component, Page }
+
+/// <summary>A component to create. Content and Metadata are complete XML documents in the schema's namespace.</summary>
+public sealed class ComponentWriteModel
+{
+    public required string Title { get; init; }
+    public required string SchemaId { get; init; }
+    public required string Content { get; init; }
+    public string? Metadata { get; init; }
+    public string CheckInComment { get; init; } = "Created by Modelry";
+}
+
+/// <summary>A multimedia component to create from a file in the uploaded page zip.</summary>
+public sealed class MultimediaWriteModel
+{
+    public required string Title { get; init; }
+    public required string SchemaId { get; init; }
+    public required string FileName { get; init; }
+    public required byte[] Data { get; init; }
+    public required string MultimediaTypeId { get; init; }
+    public string? Metadata { get; init; }
+    public string CheckInComment { get; init; } = "Created by Modelry";
+}
+
+public sealed record PresentationWriteModel(string ComponentId, string ComponentTemplateId);
+
+/// <summary>One native region of a page (Tridion 10) with its component presentations in order.</summary>
+public sealed class PageRegionWriteModel
+{
+    public required string Name { get; init; }
+    public string? RegionSchemaId { get; init; }
+    public List<PresentationWriteModel> Presentations { get; init; } = new();
+}
+
+public sealed class PageWriteModel
+{
+    public required string Title { get; init; }
+    /// <summary>File name without extension.</summary>
+    public required string FileName { get; init; }
+    public required string PageTemplateId { get; init; }
+    public string? MetadataSchemaId { get; init; }
+    public string? Metadata { get; init; }
+    public List<PageRegionWriteModel> Regions { get; init; } = new();
+    public string CheckInComment { get; init; } = "Created by Modelry";
+}
+
 /// <summary>
 /// All Tridion access goes through this interface. Implementations: CoreServiceTridionGateway (real) and
 /// InMemoryTridionGateway (demo mode). Organisation logic (traversal, planning) lives in Core.
@@ -150,6 +198,8 @@ public interface ITridionGateway
     Task<IaCategory> ReadCategoryAsync(string categoryId);
     Task<IReadOnlyList<NamedItem>> GetCategoriesAsync(string publicationId);
     Task<IReadOnlyList<NamedItem>> GetKeywordsAsync(string categoryId);
+    /// <summary>Keywords of a category that can classify content (not abstract), whether or not the IA lists them.</summary>
+    Task<IReadOnlyList<NamedItem>> GetSelectableKeywordsAsync(string categoryId);
     Task<IReadOnlyList<NamedItem>> GetComponentTemplatesAsync(string publicationId);
     Task<IReadOnlyList<MultimediaTypeInfo>> GetMultimediaTypesAsync();
     /// <summary>Creates a category; keywordMetadataSchemaId is set when the schema already exists (else null).</summary>
@@ -174,4 +224,20 @@ public interface ITridionGateway
 
     /// <summary>Rewrites fields and region definition (used for references deferred by circular dependencies), then checks in.</summary>
     Task UpdateSchemaAsync(string schemaId, SchemaWriteModel model);
+
+    // ---- content (Pages step)
+    /// <summary>Components directly in a folder, or pages directly in a Structure Group – titles and ids.</summary>
+    Task<IReadOnlyList<NamedItem>> ListItemsAsync(string containerId, ContentItemType type);
+    Task<TreeNode> GetPublicationRootStructureGroupAsync(string publicationId);
+    Task<IReadOnlyList<TreeNode>> GetSubStructureGroupsAsync(string structureGroupId);
+    /// <summary>Title, publication and path of a Structure Group (FolderInfo is reused; PathFromRoot is below the root SG).</summary>
+    Task<FolderInfo> GetStructureGroupAsync(string structureGroupId);
+    /// <summary>Creates a Structure Group; directory is its URL segment.</summary>
+    Task<TreeNode> CreateStructureGroupAsync(string parentStructureGroupId, string title, string directory);
+    Task<string> CreateComponentAsync(string folderId, ComponentWriteModel model);
+    Task<string> CreateMultimediaComponentAsync(string folderId, MultimediaWriteModel model);
+    /// <summary>Creates a page with its native regions and component presentations, and checks it in. Nothing is published.</summary>
+    Task<string> CreatePageAsync(string structureGroupId, PageWriteModel model);
+    /// <summary>Component presentations the saved page actually holds, per region ("" = outside any region).</summary>
+    Task<IReadOnlyDictionary<string, int>> GetPagePresentationCountsAsync(string pageId);
 }

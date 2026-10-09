@@ -3,12 +3,12 @@
     Layout = "_WizardLayout";
     var verb = Model.IsCheck ? "Checking" : "Creating";
     ViewData["Title"] = $"{verb} {Model.What.ToLower()}";
-    ViewData["Step"] = Model.What == "Templates" ? "templates" : "schemas";
+    ViewData["Step"] = Model.What == "Templates" ? "templates" : Model.What == "Pages" ? "pages" : "schemas";
 }
 @Html.AntiForgeryToken()
 <div id="job" data-id="@Model.Id" data-mode="@Model.Mode">
     <div class="step-head">
-        <span class="step-no">@(Model.What == "Templates" ? "Step 5 of 7" : "Step 4 of 7"), @verb.ToLower()</span>
+        <span class="step-no">@(Model.What == "Templates" ? "Step 5 of 8" : Model.What == "Pages" ? "Step 7 of 8" : "Step 4 of 8"), @verb.ToLower()</span>
         <h1 id="headline">@verb @Model.What.ToLower()</h1>
         @if (Model.IsCheck)
         {

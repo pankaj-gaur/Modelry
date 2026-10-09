@@ -10,7 +10,7 @@
 }
 @Html.AntiForgeryToken()
 <div class="step-head">
-    <span class="step-no">Step 5 of 7</span>
+    <span class="step-no">Step 5 of 8</span>
     <h1>Create templates</h1>
     @if (Cms.IsAem)
     {
@@ -36,7 +36,7 @@ else if (total > 0)
     {
         <div class="alert alert--info" role="status"><div>
             <p>Last run in <b>@run.FolderPath</b>: @run.Created created, @run.Skipped skipped@(run.Failed > 0 ? $", {run.Failed} failed" : ""). Running again skips templates that already exist.</p>
-            <p><a class="btn btn--primary" asp-action="Models">Create models</a></p>
+            <p class="actions" style="margin-top:12px"><partial name="_StepButtons" model='"templates"' /></p>
         </div></div>
     }
     <form asp-controller="Templates" asp-action="DryRun" method="post" data-needs-folder>
@@ -79,13 +79,15 @@ else if (total > 0)
         <input type="hidden" name="applyRegionConstraints" value="false" />
 
         <div class="actions">
-            <button class="btn btn--primary" type="submit" disabled data-busy="Starting the check…">Check templates</button>
-            <a class="btn btn--quiet" asp-action="Models">Skip to model creation</a>
+            <button class="btn btn--primary" type="submit" disabled data-busy="Starting the check…">Create templates</button>
         </div>
+        <p class="hint" style="margin-top:12px">Choose a folder and base templates to enable Create templates. Modelry checks the publication first and changes nothing until you confirm.</p>
     </form>
+    <h2 class="section-title">Or go to a later step</h2>
+    <div class="actions" style="margin-top:0"><partial name="_StepButtons" model='"templates"' /></div>
 }
 else
 {
-    <div class="actions"><a class="btn btn--primary" asp-action="Models">Create models</a><a class="btn btn--quiet" asp-action="Upload">Upload a new workbook</a></div>
+    <div class="actions"><partial name="_StepButtons" model='"templates"' /><a class="btn btn--quiet" asp-action="Upload">Upload a new workbook</a></div>
 }
 @section Scripts { <script src="~/js/picker.js" asp-append-version="true"></script> }

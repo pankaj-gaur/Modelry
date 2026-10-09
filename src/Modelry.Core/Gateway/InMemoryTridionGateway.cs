@@ -20,6 +20,23 @@ public sealed class InMemoryTridionGateway : ITridionGateway
         public IaCategory? Category { get; set; }
         public string? KeywordMetadataSchemaId { get; set; }
         public TemplateDetails? Template { get; set; }
+        /// <summary>Components and pages: the saved XML / page model, for inspection in tests.</summary>
+        public string? Content { get; set; }
+        public string? Metadata { get; set; }
+        public string? SchemaId { get; set; }
+        public PageWriteModel? Page { get; set; }
+        public int Bytes { get; set; }
+        public bool IsAbstract { get; set; }
+    }
+
+    /// <summary>Demo BluePrint: 020 Website EN inherits from 010 Schema Master, which inherits from 000 Empty Parent.</summary>
+    private static readonly Dictionary<string, string> ParentPublication = new() { ["tcm:0-3-1"] = "tcm:0-2-1", ["tcm:0-2-1"] = "tcm:0-1-1" };
+
+    private static HashSet<string> Visible(string publicationId)
+    {
+        var set = new HashSet<string> { publicationId };
+        for (var p = publicationId; ParentPublication.TryGetValue(p, out var parent); p = parent) set.Add(parent);
+        return set;
     }
 
     private readonly ConcurrentDictionary<string, Item> _items = new();
@@ -44,6 +61,8 @@ public sealed class InMemoryTridionGateway : ITridionGateway
             var pubId = $"tcm:0-{n}-1";
             _items[pubId] = new Item { Id = pubId, Title = pubTitle, Kind = "pub", PublicationId = pubId };
             var root = Add("folder", "Building Blocks", pubId, null, 2);
+            var rootSg = Add("sg", "Root", pubId, null, 4);
+            if (n == 3) { Add("sg", "About us", pubId, rootSg.Id, 4); Add("folder", "Content", pubId, root.Id, 2); Add("folder", "Images", pubId, root.Id, 2); }
             if (n > 1)
             {
                 Add("folder", "Schemas", pubId, root.Id, 2);
@@ -117,7 +136,7 @@ public sealed class InMemoryTridionGateway : ITridionGateway
             .Select(i => new NamedItem(i.Id, i.Title)).ToList());
 
     public Task<IReadOnlyList<NamedItem>> ListPublicationSchemasAsync(string publicationId) =>
-        Task.FromResult<IReadOnlyList<NamedItem>>(_items.Values.Where(i => i.Kind == "schema" && i.PublicationId == publicationId)
+        Task.FromResult<IReadOnlyList<NamedItem>>(_items.Values.Where(i => i.Kind == "schema" && Visible(publicationId).Contains(i.PublicationId))
             .Select(i => new NamedItem(i.Id, i.Title)).ToList());
 
     public Task<SchemaInfo> ReadSchemaInfoAsync(string schemaId)
@@ -202,15 +221,26 @@ public sealed class InMemoryTridionGateway : ITridionGateway
     }
 
     public Task<IReadOnlyList<NamedItem>> GetCategoriesAsync(string publicationId) =>
-        Task.FromResult<IReadOnlyList<NamedItem>>(_items.Values.Where(i => i.Kind == "category" && i.PublicationId == publicationId).Select(i => new NamedItem(i.Id, i.Title)).ToList());
+        Task.FromResult<IReadOnlyList<NamedItem>>(_items.Values.Where(i => i.Kind == "category" && Visible(publicationId).Contains(i.PublicationId)).Select(i => new NamedItem(i.Id, i.Title)).ToList());
 
     public Task<IReadOnlyList<NamedItem>> GetKeywordsAsync(string categoryId) =>
         Task.FromResult<IReadOnlyList<NamedItem>>(_items.Values.Where(i => i.Kind == "keyword" && i.ParentId == categoryId).Select(i => new NamedItem(i.Id, i.Title)).ToList());
 
+    public Task<IReadOnlyList<NamedItem>> GetSelectableKeywordsAsync(string categoryId) =>
+        Task.FromResult<IReadOnlyList<NamedItem>>(_items.Values.Where(i => i.Kind == "keyword" && i.ParentId == categoryId && !i.IsAbstract).Select(i => new NamedItem(i.Id, i.Title)).ToList());
+
+    /// <summary>Test hook: a keyword that exists only in the CMS (not in the workbook).</summary>
+    public string AddCmsOnlyKeyword(string categoryId, string title, bool isAbstract)
+    {
+        var kw = Add("keyword", title, Get(categoryId).PublicationId, categoryId, 1024);
+        kw.IsAbstract = isAbstract;
+        return kw.Id;
+    }
+
     // ------------------------------------------------------------------ templates
     public Task<IReadOnlyList<TemplateSummary>> GetTemplatesAsync(string publicationId, TemplateKind kind) =>
         Task.FromResult<IReadOnlyList<TemplateSummary>>(_items.Values
-            .Where(i => i.Kind == (kind == TemplateKind.Component ? "ct" : "pt") && i.PublicationId == publicationId)
+            .Where(i => i.Kind == (kind == TemplateKind.Component ? "ct" : "pt") && Visible(publicationId).Contains(i.PublicationId))
             .OrderBy(i => i.Title).Select(i => new TemplateSummary(i.Id, i.Title, kind)).ToList());
 
     public Task<IReadOnlyList<TemplateSummary>> GetTemplatesInFolderAsync(string folderId) =>
@@ -290,7 +320,9 @@ public sealed class InMemoryTridionGateway : ITridionGateway
     public Task<string> CreateKeywordAsync(string categoryId, IaKeyword keyword, IReadOnlyList<string> parentKeywordIds)
     {
         var cat = Get(categoryId);
-        return Task.FromResult(Add("keyword", keyword.Title, cat.PublicationId, categoryId, 1024).Id);
+        var kw = Add("keyword", keyword.Title, cat.PublicationId, categoryId, 1024);
+        kw.IsAbstract = keyword.IsAbstract;
+        return Task.FromResult(kw.Id);
     }
 
     public Task<string> CreateSchemaAsync(string folderId, SchemaWriteModel model)
@@ -319,4 +351,94 @@ public sealed class InMemoryTridionGateway : ITridionGateway
         Get(schemaId).Schema = model;
         return Task.CompletedTask;
     }
+
+    // ------------------------------------------------------------------ content (Pages step)
+    public Task<IReadOnlyList<NamedItem>> ListItemsAsync(string containerId, ContentItemType type) =>
+        Task.FromResult<IReadOnlyList<NamedItem>>(_items.Values
+            .Where(i => i.ParentId == containerId && (type == ContentItemType.Page ? i.Kind == "page" : i.Kind is "component" or "mm"))
+            .OrderBy(i => i.Title).Select(i => new NamedItem(i.Id, i.Title)).ToList());
+
+    public Task<TreeNode> GetPublicationRootStructureGroupAsync(string publicationId)
+    {
+        var root = _items.Values.First(i => i.Kind == "sg" && i.PublicationId == publicationId && i.ParentId is null);
+        return Task.FromResult(SgNode(root));
+    }
+
+    private TreeNode SgNode(Item sg) => new(sg.Id, sg.Title, NodeType.StructureGroup, _items.Values.Any(i => i.Kind == "sg" && i.ParentId == sg.Id));
+
+    public Task<IReadOnlyList<TreeNode>> GetSubStructureGroupsAsync(string structureGroupId) =>
+        Task.FromResult<IReadOnlyList<TreeNode>>(_items.Values.Where(i => i.Kind == "sg" && i.ParentId == structureGroupId).OrderBy(i => i.Title).Select(SgNode).ToList());
+
+    public Task<FolderInfo> GetStructureGroupAsync(string structureGroupId)
+    {
+        var sg = Get(structureGroupId);
+        if (sg.Kind != "sg") throw new InvalidOperationException($"{structureGroupId} is not a Structure Group.");
+        return Task.FromResult(new FolderInfo(sg.Id, sg.Title, sg.PublicationId, TitleOf(sg.PublicationId), PathFromRoot(sg)));
+    }
+
+    public Task<TreeNode> CreateStructureGroupAsync(string parentStructureGroupId, string title, string directory)
+    {
+        var parent = Get(parentStructureGroupId);
+        if (_items.Values.Any(i => i.Kind == "sg" && i.ParentId == parentStructureGroupId && IaWorkbook.Same(i.Title, title)))
+            throw new InvalidOperationException($"A Structure Group named '{title}' already exists here.");
+        return Task.FromResult(SgNode(Add("sg", title.Trim(), parent.PublicationId, parentStructureGroupId, 4)));
+    }
+
+    /// <summary>Checks what the CM would: schema visible, XML root and namespace right, mandatory content fields present.</summary>
+    public Task<string> CreateComponentAsync(string folderId, ComponentWriteModel model)
+    {
+        var folder = Get(folderId);
+        var schema = Get(model.SchemaId);
+        if (!Visible(folder.PublicationId).Contains(schema.PublicationId)) throw new InvalidOperationException($"Schema {model.SchemaId} is not visible in this publication.");
+        var root = System.Xml.Linq.XElement.Parse(model.Content);
+        var def = schema.Schema!.Schema;
+        if (root.Name.LocalName != def.RootElementName) throw new InvalidOperationException($"Content root element '{root.Name.LocalName}' does not match the schema's '{def.RootElementName}'.");
+        if ((root.Name.NamespaceName ?? "") != (def.NamespaceUri ?? "")) throw new InvalidOperationException($"Content namespace '{root.Name.NamespaceName}' does not match the schema's.");
+        foreach (var f in schema.Schema.ContentFields.Where(f => f.Field.Mandatory))
+            if (!root.Elements().Any(e => e.Name.LocalName == f.Field.XmlName))
+                throw new InvalidOperationException($"Mandatory field '{f.Field.XmlName}' has no value.");
+        if (_items.Values.Any(i => i.Kind is "component" or "mm" && i.ParentId == folderId && IaWorkbook.Same(i.Title, model.Title)))
+            throw new InvalidOperationException($"An item named '{model.Title}' already exists in the folder.");
+        var item = Add("component", model.Title, folder.PublicationId, folderId, 16);
+        item.Content = model.Content; item.Metadata = model.Metadata; item.SchemaId = model.SchemaId;
+        return Task.FromResult(item.Id);
+    }
+
+    public Task<string> CreateMultimediaComponentAsync(string folderId, MultimediaWriteModel model)
+    {
+        var folder = Get(folderId);
+        var schema = Get(model.SchemaId);
+        if (schema.Schema!.Schema.Purpose != IaSchemaPurpose.Multimedia) throw new InvalidOperationException("Not a multimedia schema.");
+        if (!schema.Schema.MultimediaTypeIds.Contains(model.MultimediaTypeId)) throw new InvalidOperationException($"The schema does not allow this file type ({model.FileName}).");
+        if (model.Data.Length == 0) throw new InvalidOperationException($"{model.FileName} is empty.");
+        if (_items.Values.Any(i => i.Kind is "component" or "mm" && i.ParentId == folderId && IaWorkbook.Same(i.Title, model.Title)))
+            throw new InvalidOperationException($"An item named '{model.Title}' already exists in the folder.");
+        var item = Add("mm", model.Title, folder.PublicationId, folderId, 16);
+        item.Metadata = model.Metadata; item.SchemaId = model.SchemaId; item.Bytes = model.Data.Length;
+        return Task.FromResult(item.Id);
+    }
+
+    public Task<string> CreatePageAsync(string structureGroupId, PageWriteModel model)
+    {
+        var sg = Get(structureGroupId);
+        var pt = Get(model.PageTemplateId);
+        if (pt.Kind != "pt") throw new InvalidOperationException($"{model.PageTemplateId} is not a Page Template.");
+        foreach (var cp in model.Regions.SelectMany(r => r.Presentations))
+        {
+            if (Get(cp.ComponentId).Kind is not ("component" or "mm")) throw new InvalidOperationException($"{cp.ComponentId} is not a component.");
+            if (Get(cp.ComponentTemplateId).Kind != "ct") throw new InvalidOperationException($"{cp.ComponentTemplateId} is not a Component Template.");
+        }
+        if (_items.Values.Any(i => i.Kind == "page" && i.ParentId == structureGroupId && (IaWorkbook.Same(i.Title, model.Title) || IaWorkbook.Same(i.Page?.FileName, model.FileName))))
+            throw new InvalidOperationException($"A page named '{model.Title}' (or file name '{model.FileName}') already exists in the Structure Group.");
+        var item = Add("page", model.Title, sg.PublicationId, structureGroupId, 64);
+        item.Page = model; item.Metadata = model.Metadata;
+        return Task.FromResult(item.Id);
+    }
+
+    public Task<IReadOnlyDictionary<string, int>> GetPagePresentationCountsAsync(string pageId) =>
+        Task.FromResult<IReadOnlyDictionary<string, int>>(Get(pageId).Page?.Regions.ToDictionary(r => r.Name, r => r.Presentations.Count)
+                                                          ?? new Dictionary<string, int>());
+
+    /// <summary>Test hook: the saved content XML of a component.</summary>
+    public string? ContentOf(string id) => _items.TryGetValue(id, out var i) ? i.Content : null;
 }

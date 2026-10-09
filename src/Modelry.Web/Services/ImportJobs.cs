@@ -34,6 +34,9 @@ public sealed class ImportJob : IProgress<ImportProgress>
     public required string FileName { get; init; }
     public required string FolderId { get; init; }
     public string FolderTitle { get; set; } = "";
+    /// <summary>Pages step jobs: the page run and page they belong to.</summary>
+    public string? PageRunId { get; init; }
+    public string? PageId { get; init; }
     public string PublicationTitle { get; set; } = "";
     public DateTime StartedUtc { get; } = DateTime.UtcNow;
     public DateTime? FinishedUtc { get; private set; }

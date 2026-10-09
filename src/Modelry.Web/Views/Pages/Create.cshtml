@@ -1,0 +1,125 @@
+@model PageContentViewModel
+@using Modelry.Core.Pages
+@{
+    Layout = "_WizardLayout";
+    ViewData["Title"] = "Create in Tridion";
+    ViewData["Step"] = "pages";
+    var p = Model.Plan;
+    var run = Model.Run;
+    string Status(string? existing, string? error) => error is not null ? "Problem" : existing is not null ? "Exists – reused" : "Will be created";
+}
+<div class="step-head">
+    <span class="step-no">Step 7 of 8, create in Tridion</span>
+    <h1>@Model.Page.Label</h1>
+    <p class="lead">Choose where the images, components and page go. Modelry checks first and shows exactly what it will create – nothing changes until you confirm, and nothing is published.</p>
+</div>
+
+<form asp-action="CheckContent" asp-route-id="@run.Id" method="post">
+    <h2 class="section-title" style="margin-top:0">1. Component folder</h2>
+    <p class="muted">Where the components for this page's sections, slides and list items go. Usually a content folder in the content master publication.</p>
+    @{ ViewData["PickerId"] = "component-picker"; ViewData["InputName"] = "componentFolderId"; ViewData["Mode"] = "folder";
+       ViewData["Value"] = p?.ComponentFolder.Id; ViewData["ValueLabel"] = p is null ? null : $"{p.ComponentFolder.PublicationTitle} / {p.ComponentFolder.Title}"; }
+    <partial name="_FolderPicker" view-data="ViewData" />
+
+    <h2 class="section-title">2. Images folder</h2>
+    <p class="muted">Where images and documents from the zip become multimedia components. Files already there with the same name are reused.</p>
+    @{ ViewData["PickerId"] = "image-picker"; ViewData["InputName"] = "imageFolderId"; ViewData["Mode"] = "folder";
+       ViewData["Value"] = p?.ImageFolder.Id; ViewData["ValueLabel"] = p is null ? null : $"{p.ImageFolder.PublicationTitle} / {p.ImageFolder.Title}"; }
+    <partial name="_FolderPicker" view-data="ViewData" />
+
+    <h2 class="section-title">3. Structure Group</h2>
+    <p class="muted">Where the page goes, in the website publication. You can create a sub-Structure Group here.</p>
+    @{ ViewData["PickerId"] = "sg-picker"; ViewData["InputName"] = "structureGroupId"; ViewData["Mode"] = "sg";
+       ViewData["Value"] = p?.StructureGroup.Id; ViewData["ValueLabel"] = p is null ? null : $"{p.StructureGroup.PublicationTitle} / {p.StructureGroup.Title}"; }
+    <partial name="_FolderPicker" view-data="ViewData" />
+
+    <div class="actions">
+        <button class="btn btn--primary" type="submit" disabled="@(p is null)">@(p is null ? "Check" : "Check again")</button>
+        <a class="btn btn--quiet" asp-action="Review" asp-route-id="@run.Id">Back to the sections</a>
+    </div>
+    <p class="hint" style="margin-top:12px">Choose all three to enable the check.</p>
+</form>
+
+@if (p is not null)
+{
+    var comps = p.AllComponents.ToList();
+    var newAssets = p.Assets.Count(a => a.ExistingId is null && a.Error is null);
+    var newComps = comps.Count(c => c.ExistingId is null && c.Errors.Count == 0);
+    var placeholders = comps.Sum(c => c.Placeholders.Count) + p.Page.Placeholders.Count;
+    var pageOk = p.Page.ExistingId is null && p.Page.Errors.Count == 0;
+    <h2 class="section-title" id="plan">What the check found</h2>
+    <p class="muted">Components in <b>@p.ComponentFolder.PublicationTitle / @p.ComponentFolder.Title</b>, images in <b>@p.ImageFolder.PublicationTitle / @p.ImageFolder.Title</b>, page in <b>@p.StructureGroup.PublicationTitle / @p.StructureGroup.Title</b>.</p>
+    <div class="tally">
+        <span><b>@newAssets</b> multimedia to create</span>
+        <span><b>@newComps</b> components to create</span>
+        <span><b>@(pageOk ? 1 : 0)</b> page to create</span>
+        <span><b>@(p.Assets.Count(a => a.ExistingId is not null) + comps.Count(c => c.ExistingId is not null))</b> reused</span>
+        <span><b>@placeholders</b> placeholders</span>
+    </div>
+    @if (p.Issues.Count > 0)
+    {
+        <partial name="_Issues" model="p.Issues" />
+    }
+
+    <h2 class="section-title">Multimedia (@p.Assets.Count)</h2>
+    <div class="table-wrap">
+        <table class="data">
+            <thead><tr><th>File</th><th>Schema</th><th>Alt text</th><th>Status</th></tr></thead>
+            <tbody>
+            @foreach (var a in p.Assets)
+            {
+                <tr>
+                    <td><b>@a.Title</b><br /><span class="muted small">@a.Url@(a.Bytes > 0 ? $" · {a.Bytes / 1024.0:0.#} KB" : "")</span></td>
+                    <td>@(a.SchemaTitle ?? "–")</td>
+                    <td>@(string.IsNullOrEmpty(a.AltText) ? "–" : a.AltText)</td>
+                    <td>@Status(a.ExistingId, a.Error)@if (a.Error is not null) { <br /><span class="small muted">@a.Error</span> }</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+
+    <h2 class="section-title">Components (@comps.Count)</h2>
+    <div class="table-wrap">
+        <table class="data">
+            <thead><tr><th>Title</th><th>Schema</th><th>On the page</th><th>Status</th></tr></thead>
+            <tbody>
+            @foreach (var c in comps)
+            {
+                <tr>
+                    <td><b>@c.Title</b>@if (c.Parent is not null) { <br /><span class="muted small">Linked from @c.Parent.Title</span> }</td>
+                    <td>@SectionMatcher.StripPrefix(c.Schema.Title)</td>
+                    <td>@(c.Region is null ? "–" : $"{c.Region} · {SectionMatcher.StripPrefix(c.TemplateTitle ?? "")}")</td>
+                    <td>
+                        @(c.Errors.Count > 0 ? "Problem" : c.ExistingId is not null ? "Exists – reused" : "Will be created")
+                        @foreach (var e in c.Errors) { <br /><span class="small" style="color:var(--petal-pink-ink)">@e</span> }
+                        @if (c.Placeholders.Count > 0 && c.ExistingId is null)
+                        {
+                            <details class="small"><summary>@c.Placeholders.Count placeholder@(c.Placeholders.Count == 1 ? "" : "s")</summary>
+                                <ul>@foreach (var ph in c.Placeholders) { <li>@ph</li> }</ul></details>
+                        }
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+
+    <h2 class="section-title">Page</h2>
+    <div class="card">
+        <p><b>@p.Page.Title</b> <span class="muted">(@p.Page.FileName) with Page Template @(p.Page.PageTemplateTitle ?? "–")</span></p>
+        <ul class="small" style="margin:8px 0 0">
+            @foreach (var r in p.Page.Regions)
+            {
+                <li><b>@r.Region</b>: @string.Join(", ", r.Components.Select(c => c.Title))</li>
+            }
+        </ul>
+        <p class="small" style="margin-top:8px">@(p.Page.Errors.Count > 0 ? string.Join(" ", p.Page.Errors) : p.Page.ExistingId is not null ? "A page with this title already exists in the Structure Group – it is left as it is." : "Will be created. Nothing is published.")</p>
+    </div>
+
+    <form asp-action="CreateContent" asp-route-id="@run.Id" method="post" class="actions">
+        <button class="btn btn--primary" type="submit" disabled="@(newAssets + newComps + (pageOk ? 1 : 0) == 0)">Create @(newAssets + newComps + (pageOk ? 1 : 0)) items</button>
+        <span class="small muted">Items with a problem are skipped and listed in the log.</span>
+    </form>
+}
+@section Scripts { <script src="~/js/picker.js" asp-append-version="true"></script><script src="~/js/issues.js" asp-append-version="true"></script> }

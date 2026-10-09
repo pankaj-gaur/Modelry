@@ -6,7 +6,7 @@
     ViewData["Step"] = "finish";
 }
 <div class="step-head">
-    <span class="step-no">Step 7 of 7</span>
+    <span class="step-no">Step 8 of 8</span>
     <h1>@(Model.SchemaRun is not null || Model.TemplateRun is not null || Model.ModelRun is not null ? "Your content model is in place" : "Nothing created yet")</h1>
     <p class="lead">@(Cms.IsAem ? "AEM creation arrives in the next release. Your workbook is validated and its AEM mapping is ready." : "Here's what Modelry created from " + Model.FileName + ". Download the logs for your audit trail.")</p>
 </div>
@@ -36,13 +36,31 @@
     else if (Model.ModelRun is not { } models)
     {
         <p class="muted" style="margin-top:8px">Not generated in this session.</p>
-        <a class="btn btn--small" asp-action="Models">Go to models</a>
+        <a class="btn btn--small" asp-action="Models">Create DXA models</a>
     }
     else
     {
         <p class="muted" style="margin-top:4px">In @models.Namespace, @models.FinishedUtc.ToLocalTime().ToString("d MMM, HH:mm")</p>
         <div class="tally"><span><b>@models.Classes</b> classes</span><span><b>@models.Registrations</b> registrations</span><span><b>@models.Warnings</b> warnings</span></div>
         @if (models.ResultId is not null) { <a class="btn btn--small" asp-controller="Models" asp-action="Download" asp-route-id="@models.ResultId">Download models (.zip)</a> }
+    }
+</div>
+<div class="card">
+    <h2>Pages</h2>
+    @if (Model.PageRuns.Count == 0)
+    {
+        <p class="muted" style="margin-top:8px">No pages done in this session.</p>
+        @if (!Cms.IsAem) { <a class="btn btn--small" asp-controller="Pages" asp-action="Index">Create DXA Views and Pages</a> }
+    }
+    else
+    {
+        <ul style="margin:8px 0 0;padding-left:1.1em">
+            @foreach (var p in Model.PageRuns.OrderBy(p => p.PageId))
+            {
+                <li><b>@p.PageId</b> – @p.PageName: @p.Mapped of @p.Sections sections mapped, @p.Views views
+                    @if (p.ViewsResultId is not null) { <a asp-controller="Pages" asp-action="DownloadViews" asp-route-rid="@p.ViewsResultId">download</a> }</li>
+            }
+        </ul>
     }
 </div>
 <h2 class="section-title">Next steps</h2>

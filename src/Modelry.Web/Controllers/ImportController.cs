@@ -209,10 +209,19 @@ public sealed class ImportController : Controller
         {
             JobState.Running => RedirectToAction(nameof(Progress), new { id }),
             JobState.PlanErrors => View(job.PlanErrorsView, job.PlanErrorsModel),
+            // Pages step: the findings are shown on the page's own Create screen.
+            JobState.Checked when job.What == "Pages" => Redirect(Url.Action("Create", "Pages", new { id = job.PageRunId })! + "#plan"),
+            JobState.Failed when job.What == "Pages" => FailPages(job),
             JobState.Failed => FailStep(job.What, job.IsCheck ? job.Error ?? "The check stopped." : $"Creation stopped: {job.Error}"),
             JobState.Checked => View(job.PlanErrorsView, job.PlanErrorsModel),
             _ => Completed(job)
         };
+    }
+
+    private IActionResult FailPages(ImportJob job)
+    {
+        TempData["Error"] = job.IsCheck ? $"The check stopped: {job.Error}" : $"Creation stopped: {job.Error}";
+        return RedirectToAction("Create", "Pages", new { id = job.PageRunId });
     }
 
     /// <summary>Records the run on the journey rail and shows the result.</summary>
@@ -223,7 +232,17 @@ public sealed class ImportController : Controller
             FolderPath = $"{job.PublicationTitle} / {job.FolderTitle}", Created = job.Result!.Created, Skipped = job.Result.Skipped,
             Failed = job.Result.Failed, Cancelled = job.Result.Cancelled, ResultId = job.ResultId, FinishedUtc = job.FinishedUtc ?? DateTime.UtcNow
         };
-        _wizard.Update(d => { if (job.What == "Templates") d.TemplateRun = run; else d.SchemaRun = run; });
+        _wizard.Update(d =>
+        {
+            if (job.What == "Templates") d.TemplateRun = run;
+            else if (job.What == "Pages")
+            {
+                var pr = d.PageRuns.FirstOrDefault(p => p.PageId == job.PageId);
+                if (pr is null) d.PageRuns.Add(pr = new PageRunSummary { RunId = job.PageRunId ?? "", PageId = job.PageId ?? "", FinishedUtc = run.FinishedUtc });
+                pr.Content = run;
+            }
+            else d.SchemaRun = run;
+        });
         return View("Result", new ImportResultViewModel { ResultId = job.ResultId!, FolderTitle = job.FolderTitle, Result = job.Result!, What = job.What });
     }
 

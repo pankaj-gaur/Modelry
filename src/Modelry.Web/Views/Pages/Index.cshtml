@@ -1,0 +1,112 @@
+@model PagesViewModel
+@{
+    Layout = "_WizardLayout";
+    ViewData["Title"] = "Create DXA Views and Pages";
+    ViewData["Step"] = "pages";
+    var d = Model.Wizard;
+}
+<div class="step-head">
+    <span class="step-no">Step 7 of 8</span>
+    <h1>Create DXA Views and Pages</h1>
+    @if (Model.IsAem)
+    {
+        <p class="lead">For AEM, building pages from HTML arrives in a later release.</p>
+    }
+    else
+    {
+        <p class="lead">One page at a time: choose the page, upload its HTML as a zip, and check which component each section of the HTML becomes. Modelry then writes the Razor views. Header, footer and navigation are left out – the templates render them.</p>
+    }
+</div>
+
+@if (Model.IsAem)
+{
+    <div class="actions" style="margin-top:0"><a class="btn btn--primary" asp-controller="Wizard" asp-action="Finish">Continue to finish</a></div>
+}
+else if (Model.ReadError is not null)
+{
+    <div class="alert alert--error" role="alert"><p>@Model.ReadError</p></div>
+    <div class="actions" style="margin-top:0"><a class="btn btn--primary" asp-controller="Wizard" asp-action="Upload">Upload the workbook</a></div>
+}
+else if (Model.Pages.Count == 0)
+{
+    <div class="alert alert--warn" role="status"><p>This workbook has no <b>Page Inventory</b> and <b>Page-Schema Mapping</b> sheets, so Modelry can't tell which components a page has. Add them (see the SABIC IA for the columns) and upload the workbook again.</p></div>
+}
+else
+{
+    @if (Model.CurrentRun is { } run && Model.CurrentPage is { } cp)
+    {
+        <div class="alert alert--info" role="status"><div>
+            <p>You're working on <b>@cp.Label</b> from <b>@run.ZipName</b>.</p>
+            <p class="actions" style="margin-top:12px"><a class="btn btn--primary" asp-action="Review" asp-route-id="@run.Id">Continue reviewing</a></p>
+        </div></div>
+    }
+
+    <form asp-action="Upload" method="post" enctype="multipart/form-data">
+        <h2 class="section-title" style="margin-top:0">1. Which page is it?</h2>
+        <div class="field" style="max-width:640px">
+            <label for="pageId">Page (ID and name)</label>
+            <select id="pageId" name="pageId" required>
+                <option value="">Choose a page</option>
+                @foreach (var g in Model.Pages.GroupBy(p => $"{p.Page.Site} – {p.Page.Section}"))
+                {
+                    <optgroup label="@g.Key">
+                        @foreach (var (p, n) in g)
+                        {
+                            <option value="@p.PageId" selected="@(p.PageId == Model.SelectedPageId)" disabled="@(n == 0)">@p.Label (@(n == 0 ? "no authored components" : $"{n} components"))@(d.PageRuns.Any(r => r.PageId == p.PageId) ? " ✓" : "")</option>
+                        }
+                    </optgroup>
+                }
+            </select>
+            <span class="hint">The page's rows in the Page-Schema Mapping sheet give the expected components, their order, regions and templates.</span>
+        </div>
+
+        <h2 class="section-title">2. Upload its HTML</h2>
+        <label class="dropzone" style="min-height:140px">
+            <input type="file" name="file" accept=".zip" required />
+            <span class="dropzone__title">Drop the page's zip here</span>
+            <span class="muted">The HTML file with its css, js and images folders, as the front-end team delivers it (up to 100 MB)</span>
+            <span class="dropzone__file" aria-live="polite"></span>
+        </label>
+        @if (Model.HtmlChoices.Count > 0)
+        {
+            <div class="field" style="max-width:640px;margin-top:16px">
+                <label for="entry">Which HTML file is the page?</label>
+                <select id="entry" name="entry" required>
+                    @foreach (var h in Model.HtmlChoices) { <option value="@h">@h</option> }
+                </select>
+                <span class="hint">Choose it, then upload the same zip again.</span>
+            </div>
+        }
+        <label class="check" style="margin-top:16px">
+            <input type="checkbox" name="allowScripts" value="true" />
+            <span><b>Run the page's own scripts in the thumbnails</b><br /><span class="muted small">Only if some sections only appear once JavaScript runs. Thumbnails are sandboxed either way.</span></span>
+        </label>
+        <input type="hidden" name="allowScripts" value="false" />
+        <div class="actions">
+            <button class="btn btn--primary" type="submit">Upload and match sections</button>
+            <a class="btn btn--quiet" asp-controller="Wizard" asp-action="Finish">Skip to finish</a>
+        </div>
+    </form>
+
+    @if (d.PageRuns.Count > 0)
+    {
+        <h2 class="section-title">Pages done in this session</h2>
+        <div class="table-wrap">
+            <table class="data">
+                <thead><tr><th>Page</th><th>Sections</th><th>Views</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var p in d.PageRuns.OrderByDescending(p => p.FinishedUtc))
+                {
+                    <tr>
+                        <td><b>@p.PageId</b> – @p.PageName<br /><span class="muted small">@p.FinishedUtc.ToLocalTime().ToString("d MMM, HH:mm")</span></td>
+                        <td>@p.Mapped of @p.Sections mapped</td>
+                        <td>@p.Views</td>
+                        <td>@if (p.ViewsResultId is not null) { <a class="btn btn--small" asp-action="DownloadViews" asp-route-rid="@p.ViewsResultId">Download views</a> }</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+@section Scripts { <script src="~/js/upload.js" asp-append-version="true"></script> }

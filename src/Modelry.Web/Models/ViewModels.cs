@@ -102,3 +102,36 @@ public sealed class ModelsViewModel
     public List<string> MetadataSchemas { get; set; } = new();
     public string? ReadError { get; set; }
 }
+
+public sealed record PageOption(string Value, string Label, string Group);
+
+public sealed class PagesViewModel
+{
+    public required Modelry.Web.Services.WizardData Wizard { get; init; }
+    public bool IsAem { get; init; }
+    public List<(IaPage Page, int Components)> Pages { get; set; } = new();
+    public Modelry.Web.Services.PageRun? CurrentRun { get; set; }
+    public IaPage? CurrentPage { get; set; }
+    public string? SelectedPageId { get; set; }
+    /// <summary>HTML files to choose from when the zip had several and no index.html.</summary>
+    public List<string> HtmlChoices { get; set; } = new();
+    public string? ReadError { get; set; }
+}
+
+public sealed class PageReviewViewModel
+{
+    public required Modelry.Web.Services.WizardData Wizard { get; init; }
+    public required Modelry.Web.Services.PageRun Run { get; init; }
+    public required Modelry.Web.Services.PageAnalysis Analysis { get; init; }
+    public required string PreviewBase { get; init; }
+    public required List<PageOption> Options { get; init; }
+    public Modelry.Web.Services.PageRunSummary? ViewsResult { get; init; }
+}
+
+public sealed class PageContentViewModel
+{
+    public required Modelry.Web.Services.WizardData Wizard { get; init; }
+    public required Modelry.Web.Services.PageRun Run { get; init; }
+    public required IaPage Page { get; init; }
+    public Modelry.Core.Pages.ContentPlan? Plan { get; init; }
+}

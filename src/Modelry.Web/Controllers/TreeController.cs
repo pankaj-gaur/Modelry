@@ -17,12 +17,33 @@ public sealed class TreeController : ControllerBase
     [HttpGet("publications")]
     public Task<IActionResult> Publications() => Run(async () => (await _gw.Gateway.GetPublicationsAsync()).Select(Dto));
 
-    /// <summary>Children of a publication (its root folder) or of a folder (sub-folders).</summary>
+    /// <summary>Children of a publication (its root folder, or root Structure Group with mode=sg) or of a folder / Structure Group.</summary>
     [HttpGet("children")]
-    public Task<IActionResult> Children([FromQuery] string id) => Run(async () =>
-        IsPublication(id)
-            ? new[] { Dto(await _gw.Gateway.GetPublicationRootFolderAsync(id)) }.AsEnumerable()
-            : (await _gw.Gateway.GetSubFoldersAsync(id)).Select(Dto));
+    public Task<IActionResult> Children([FromQuery] string id, [FromQuery] string? mode) => Run(async () =>
+        mode == "sg"
+            ? IsPublication(id)
+                ? new[] { Dto(await _gw.Gateway.GetPublicationRootStructureGroupAsync(id)) }.AsEnumerable()
+                : (await _gw.Gateway.GetSubStructureGroupsAsync(id)).Select(Dto)
+            : IsPublication(id)
+                ? new[] { Dto(await _gw.Gateway.GetPublicationRootFolderAsync(id)) }.AsEnumerable()
+                : (await _gw.Gateway.GetSubFoldersAsync(id)).Select(Dto));
+
+    [HttpGet("structure-group")]
+    public Task<IActionResult> StructureGroup([FromQuery] string id) => Run(async () =>
+    {
+        var sg = await _gw.Gateway.GetStructureGroupAsync(id);
+        return (object)new { sg.Id, sg.Title, sg.PublicationId, sg.PublicationTitle, SchemaCount = 0 };
+    });
+
+    [HttpPost("structure-groups"), ValidateAntiForgeryToken]
+    public Task<IActionResult> CreateStructureGroup([FromBody] CreateFolderRequest req) => Run(async () =>
+    {
+        if (req.Title.IndexOfAny(new[] { '/', '\\' }) >= 0) throw new ArgumentException("Structure Group title cannot contain '/' or '\\'.");
+        var directory = System.Text.RegularExpressions.Regex.Replace(req.Title.Trim().ToLowerInvariant(), "[^a-z0-9]+", "-").Trim('-');
+        var node = await _gw.Gateway.CreateStructureGroupAsync(req.ParentId, req.Title, directory.Length == 0 ? "sg" : directory);
+        _log.LogInformation("AUDIT {Who} created Structure Group '{Title}' ({Id}) in {Parent}", _session.Who, req.Title, node.Id, req.ParentId);
+        return (object)Dto(node);
+    });
 
     [HttpGet("folder")]
     public Task<IActionResult> Folder([FromQuery] string id) => Run(async () =>

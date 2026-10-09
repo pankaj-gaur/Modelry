@@ -27,6 +27,12 @@ public sealed class TridionOptions
     public int MaxUploadMegabytes { get; set; } = 10;
     /// <summary>Create reuses the check's snapshot if started within this many minutes (0 = always re-check).</summary>
     public int CheckReuseMinutes { get; set; } = 30;
+    /// <summary>Pages step: Core Service stream upload endpoint for images and documents. Empty = derived from CoreServiceUrl
+    /// (…/CoreService201701.svc/basicHttp → …/CoreService201701.svc/streamUpload_basicHttp).</summary>
+    public string? StreamUploadUrl { get; set; }
+    /// <summary>Pages step, alternative to stream upload: a folder (e.g. a UNC share) that both Modelry and the Content Manager
+    /// server can read. Files are copied there and the Content Manager reads them from that path. Empty = use stream upload.</summary>
+    public string? MultimediaUploadShare { get; set; }
 }
 
 public enum AuthMode { Windows, OAuth }

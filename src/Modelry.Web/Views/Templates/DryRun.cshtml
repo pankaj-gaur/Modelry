@@ -11,7 +11,7 @@
     var inc = string.Join(", ", new[] { Model.HeaderInclude, Model.FooterInclude }.Where(s => !string.IsNullOrWhiteSpace(s)));
 }
 <div class="step-head">
-    <span class="step-no">Step 5 of 7, check</span>
+    <span class="step-no">Step 5 of 8, check</span>
     <h1>@(errors == 0 ? $"Ready to create {cts + pts} templates" : $"{errors} problem{(errors == 1 ? "" : "s")} to fix first")</h1>
     <p class="lead">Checked against <b>@Model.PublicationTitle / @Model.FolderTitle</b>. Nothing has been changed yet.</p>
 </div>

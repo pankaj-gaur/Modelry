@@ -8,7 +8,7 @@
 }
 @Html.AntiForgeryToken()
 <div class="step-head">
-    <span class="step-no">Step 4 of 7</span>
+    <span class="step-no">Step 4 of 8</span>
     <h1>Create schemas</h1>
     @if (Cms.IsAem)
     {
@@ -30,7 +30,7 @@ else
     {
         <div class="alert alert--info" role="status"><div>
             <p>Last run in <b>@run.FolderPath</b>: @run.Created created, @run.Skipped skipped@(run.Failed > 0 ? $", {run.Failed} failed" : ""). Running again skips schemas that already exist.</p>
-            <p class="actions" style="margin-top:12px"><a class="btn btn--primary" asp-action="Templates">Continue to create templates</a><a class="btn btn--primary" asp-action="Models">Create models</a></p>
+            <p class="actions" style="margin-top:12px"><partial name="_StepButtons" model='"schemas"' /></p>
         </div></div>
     }
     <form asp-controller="Import" asp-action="DryRun" method="post" data-needs-folder>
@@ -39,10 +39,11 @@ else
         @{ ViewData["PickerId"] = "schema-picker"; ViewData["InputName"] = "folderId"; }
         <partial name="_FolderPicker" view-data="ViewData" />
         <div class="actions">
-            <button class="btn btn--primary" type="submit" disabled data-busy="Starting the check…">Check schemas</button>
-            <a class="btn btn--primary" asp-action="Models">Create models</a>
-            <a class="btn btn--quiet" asp-action="Templates">Go to create templates</a>
+            <button class="btn btn--primary" type="submit" disabled data-busy="Starting the check…">Create schemas</button>
         </div>
+        <p class="hint" style="margin-top:12px">Choose a folder to enable Create schemas. Modelry checks the publication first and changes nothing until you confirm.</p>
     </form>
+    <h2 class="section-title">Or go to a later step</h2>
+    <div class="actions" style="margin-top:0"><partial name="_StepButtons" model='"schemas"' /></div>
 }
 @section Scripts { <script src="~/js/picker.js" asp-append-version="true"></script> }

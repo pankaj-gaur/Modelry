@@ -2,13 +2,13 @@
 @using Modelry.Core.CodeGen
 @{
     Layout = "_WizardLayout";
-    ViewData["Title"] = "Create models";
+    ViewData["Title"] = "Create DXA models";
     ViewData["Step"] = "models";
     var d = Model.Wizard;
     var p = Model.Plan;
 }
 <div class="step-head">
-    <span class="step-no">Step 6 of 7</span>
+    <span class="step-no">Step 6 of 8</span>
     <h1>Create DXA models</h1>
     @if (Model.IsAem)
     {
@@ -39,7 +39,8 @@ else
             <p><b>@run.Classes model classes and @run.Registrations registrations generated</b> in <code>@run.Namespace</code>, @run.FinishedUtc.ToLocalTime().ToString("d MMM, HH:mm")@(run.Warnings > 0 ? $" – {run.Warnings} warnings, listed in the README" : "").</p>
             <p class="actions" style="margin-top:12px">
                 <a class="btn btn--primary" asp-controller="Models" asp-action="Download" asp-route-id="@run.ResultId">Download models (.zip)</a>
-                <a class="btn" asp-action="Finish">Continue to finish</a>
+                <partial name="_StepButtons" model='"models"' />
+                <a class="btn btn--quiet" asp-action="Finish">Skip to finish</a>
             </p>
             <p class="small muted">The zip is kept for 2 hours. Generating again replaces it.</p>
         </div></div>
@@ -92,6 +93,7 @@ else
             {
                 <button class="btn btn--primary" type="submit">@(d.ModelRun is null ? $"Generate {p.Classes.Count} models" : "Generate again")</button>
             }
+            @if (d.ModelRun is null) { <partial name="_StepButtons" model='"models"' /> }
             <a class="btn btn--quiet" asp-action="Finish">Skip to finish</a>
         </div>
     </form>

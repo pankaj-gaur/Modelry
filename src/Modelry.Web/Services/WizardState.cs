@@ -36,6 +36,23 @@ public sealed class ModelSettings
     public string? SemanticPrefix { get; set; }
 }
 
+/// <summary>One page handled on the Pages step.</summary>
+public sealed class PageRunSummary
+{
+    public string RunId { get; set; } = "";
+    public string PageId { get; set; } = "";
+    public string PageName { get; set; } = "";
+    public int Sections { get; set; }
+    public int Mapped { get; set; }
+    public int Views { get; set; }
+    public int Findings { get; set; }
+    public string? ViewsResultId { get; set; }
+    public string FileName { get; set; } = "";
+    public DateTime FinishedUtc { get; set; }
+    /// <summary>Stage 2: what was created in Tridion for this page (null = not run).</summary>
+    public RunSummary? Content { get; set; }
+}
+
 /// <summary>What the uploaded IA workbook contains.</summary>
 public sealed class IaSummary
 {
@@ -67,6 +84,13 @@ public sealed class WizardData
     public RunSummary? TemplateRun { get; set; }
     public ModelRunSummary? ModelRun { get; set; }
     public ModelSettings? ModelSettings { get; set; }
+    /// <summary>Pages done on the Pages step in this session (latest per page).</summary>
+    public List<PageRunSummary> PageRuns { get; set; } = new();
+    /// <summary>Views generated in this session → the page they came from (first sample wins for later pages).</summary>
+    public Dictionary<string, string> ViewSources { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public string? CurrentPageRunId { get; set; }
+    /// <summary>Index (in StepTrackingFilter.Steps) of the furthest step opened; earlier unfinished steps show as skipped.</summary>
+    public int FurthestStep { get; set; }
     public bool HasIa => UploadId is not null;
 }
 

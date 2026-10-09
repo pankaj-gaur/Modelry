@@ -178,6 +178,33 @@ public static class IaExcelReader
 
         if (wb.TemplatesSource is null) ReadLegacyTemplates(xl, wb, issues);
 
+        // Optional sheets for the Pages step (no issues when missing).
+        foreach (var row in Rows(xl, IaFormat.PagesSheet, IaFormat.Pages.All, issues, required: false))
+        {
+            var id = row[IaFormat.Pages.PageId];
+            if (string.IsNullOrWhiteSpace(id)) continue;
+            wb.Pages.Add(new IaPage
+            {
+                PageId = id.Trim(), PageName = row[IaFormat.Pages.PageName].Trim(), Site = NullIfEmpty(row[IaFormat.Pages.Site]),
+                Section = NullIfEmpty(row[IaFormat.Pages.Section]), ProposedUrl = NullIfEmpty(row[IaFormat.Pages.ProposedUrl]),
+                PageSchema = NullIfEmpty(row[IaFormat.Pages.PageSchema]), PageMetadataSchema = NullIfEmpty(row[IaFormat.Pages.PageMetadataSchema]),
+                PageTemplate = NullIfEmpty(row[IaFormat.Pages.PageTemplate]), AutoRendered = NullIfEmpty(row[IaFormat.Pages.AutoRendered]), Row = row.Number
+            });
+        }
+        foreach (var row in Rows(xl, IaFormat.MappingSheet, IaFormat.Mapping.All, issues, required: false))
+        {
+            var pageId = row[IaFormat.Mapping.PageId];
+            if (string.IsNullOrWhiteSpace(pageId)) continue;
+            wb.Mapping.Add(new IaMappingRow
+            {
+                MapId = row[IaFormat.Mapping.MapId].Trim(), PageId = pageId.Trim(), Region = NullIfEmpty(row[IaFormat.Mapping.Region]),
+                RegionSchema = NullIfEmpty(row[IaFormat.Mapping.RegionSchema]), UiSection = NullIfEmpty(row[IaFormat.Mapping.UiSection]),
+                SpecIds = NullIfEmpty(row[IaFormat.Mapping.SpecIds]), SchemaTitle = NullIfEmpty(row[IaFormat.Mapping.SchemaTitle]),
+                ComponentTemplate = NullIfEmpty(row[IaFormat.Mapping.ComponentTemplate]), ContentSource = NullIfEmpty(row[IaFormat.Mapping.ContentSource]),
+                Notes = NullIfEmpty(row[IaFormat.Mapping.Notes]), ReuseGroup = NullIfEmpty(row[IaFormat.Mapping.ReuseGroup]), Row = row.Number
+            });
+        }
+
         foreach (var row in Rows(xl, IaFormat.KeywordsSheet, IaFormat.Keywords.All, issues, required: false))
         {
             var cat = row[IaFormat.Keywords.Category];

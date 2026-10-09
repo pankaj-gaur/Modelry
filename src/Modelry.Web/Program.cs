@@ -9,7 +9,7 @@ builder.Host.UseSerilog((ctx, lc) => lc.ReadFrom.Configuration(ctx.Configuration
 var tridion = builder.Configuration.GetSection("Tridion").Get<TridionOptions>() ?? new TridionOptions();
 builder.Services.Configure<TridionOptions>(builder.Configuration.GetSection("Tridion"));
 builder.Services.Configure<TemplateFieldOptions>(builder.Configuration.GetSection("Templates"));
-builder.Services.AddControllersWithViews(o => o.Filters.Add<RequireTridionSessionFilter>());
+builder.Services.AddControllersWithViews(o => { o.Filters.Add<RequireTridionSessionFilter>(); o.Filters.Add<StepTrackingFilter>(); });
 builder.Services.AddAntiforgery(o => o.HeaderName = "RequestVerificationToken");
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddMemoryCache();
@@ -36,6 +36,7 @@ builder.Services.AddScoped<GatewayAccessor>();
 builder.Services.AddScoped<RequireTridionSessionFilter>();
 builder.Services.AddSingleton<UploadStore>();
 builder.Services.AddSingleton<ImportJobStore>();
+builder.Services.AddSingleton<PageRunStore>();
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o =>
     o.MultipartBodyLengthLimit = tridion.MaxUploadMegabytes * 1024L * 1024L);
 

@@ -26,11 +26,14 @@ public sealed class CoreServiceTridionGateway : ITridionGateway, IDisposable
     private static readonly CS.ReadOptions ReadOpts = new();
     private List<MultimediaTypeInfo>? _mmTypes;
     private readonly string _endpoint;
+    private readonly TridionOptions _options;
+    private readonly CoreServiceConnection _connection;
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (DateTime At, List<MultimediaTypeInfo> Types)> MmCache = new();
 
     public CoreServiceTridionGateway(TridionOptions options, CoreServiceConnection connection)
     {
         _endpoint = connection.Url;
+        _options = options; _connection = connection;
         _factory = new ChannelFactory<CoreServiceContract>(CoreServiceChannel.CreateBinding(options, connection), new EndpointAddress(connection.Url));
         CoreServiceChannel.Configure(_factory, connection);
         _client = _factory.CreateChannel();
@@ -108,6 +111,7 @@ public sealed class CoreServiceTridionGateway : ITridionGateway, IDisposable
     {
         var f = (CS.FolderData)await _client.GetDefaultDataAsync(CS.ItemType.Folder, parentFolderId, ReadOpts);
         f.Title = title.Trim();
+        await EnsureMetadataAsync(f, parentFolderId);
         var created = await _client.CreateAsync(f, ReadOpts);
         return new TreeNode(created.Id, created.Title, NodeType.Folder, false, 0);
     }
@@ -261,6 +265,11 @@ public sealed class CoreServiceTridionGateway : ITridionGateway, IDisposable
         (await _client.GetListAsync(categoryId, new CS.OrganizationalItemItemsFilterData { ItemTypes = new[] { CS.ItemType.Keyword }, Recursive = true }))
             .Select(i => new NamedItem(i.Id, i.Title)).ToList();
 
+    /// <summary>Non-abstract keywords of the category, as the CMS sees them (KeywordsFilterData.IsAbstract = false).</summary>
+    public async Task<IReadOnlyList<NamedItem>> GetSelectableKeywordsAsync(string categoryId) =>
+        (await _client.GetListAsync(categoryId, new CS.KeywordsFilterData { IsAbstract = false }))
+            .Select(i => new NamedItem(i.Id, i.Title)).ToList();
+
     public async Task<IReadOnlyList<NamedItem>> GetComponentTemplatesAsync(string publicationId) =>
         (await _client.GetListAsync(publicationId, new CS.RepositoryItemsFilterData { ItemTypes = new[] { CS.ItemType.ComponentTemplate }, Recursive = true }))
             .Select(i => new NamedItem(i.Id, i.Title)).ToList();
@@ -293,6 +302,7 @@ public sealed class CoreServiceTridionGateway : ITridionGateway, IDisposable
         Reflect.TrySet(c, "UseForIdentification", category.UseForIdentification);
         if (keywordMetadataSchemaId is not null)
             Reflect.TrySet(c, "KeywordMetadataSchema", new CS.LinkToSchemaData { IdRef = keywordMetadataSchemaId });
+        await EnsureMetadataAsync(c, publicationId);
         return (await _client.CreateAsync(c, ReadOpts)).Id;
     }
 
@@ -312,6 +322,9 @@ public sealed class CoreServiceTridionGateway : ITridionGateway, IDisposable
         Reflect.TrySet(k, "IsAbstract", keyword.IsAbstract);
         if (parentKeywordIds.Count > 0)
             k.ParentKeywords = parentKeywordIds.Select(id => new CS.LinkToKeywordData { IdRef = id }).ToArray();
+        // Keywords use the category's Keyword Metadata Schema; the CM rejects a keyword without <Metadata> when it has fields.
+        var categoryMeta = (Reflect.Get(await _client.ReadAsync(categoryId, ReadOpts), "KeywordMetadataSchema") as CS.LinkToSchemaData)?.IdRef;
+        await EnsureMetadataAsync(k, categoryId, categoryMeta);
         return (await _client.CreateAsync(k, ReadOpts)).Id;
     }
 
@@ -363,7 +376,10 @@ public sealed class CoreServiceTridionGateway : ITridionGateway, IDisposable
             MetadataFields = model.MetadataFields.Select(ToDefinition).ToArray()
         };
         object xsd = await _client.ConvertSchemaFieldsToXsdAsync(sf);                 // VERIFY: ConvertSchemaFieldsToXsd(SchemaFieldsData)
-        s.Xsd = XsdText(xsd);
+        // Fixed maximums above 1 were not kept by the conversion; enforce Min/Max Occurs on the XSD itself.
+        var (patched, _) = XsdOccurrence.Apply(XsdText(xsd), s.RootElementName,
+            model.ContentFields.Select(f => f.Field), model.MetadataFields.Select(f => f.Field));
+        s.Xsd = patched;
     }
 
     private static string XsdText(object xsd) => xsd switch
@@ -622,10 +638,321 @@ public sealed class CoreServiceTridionGateway : ITridionGateway, IDisposable
         }
     }
 
+    // ------------------------------------------------------------------ content (Pages step)
+    public async Task<IReadOnlyList<NamedItem>> ListItemsAsync(string containerId, ContentItemType type)
+    {
+        var filter = new CS.OrganizationalItemItemsFilterData
+        { ItemTypes = new[] { type == ContentItemType.Page ? CS.ItemType.Page : CS.ItemType.Component }, Recursive = false };
+        return (await _client.GetListAsync(containerId, filter)).Select(i => new NamedItem(i.Id, i.Title)).ToList();
+    }
+
+    public async Task<TreeNode> GetPublicationRootStructureGroupAsync(string publicationId)
+    {
+        var pub = (CS.PublicationData)await _client.ReadAsync(publicationId, ReadOpts);
+        var root = Reflect.Get(pub, "RootStructureGroup") as CS.LinkToStructureGroupData                         // VERIFY: PublicationData.RootStructureGroup
+                   ?? throw new InvalidOperationException($"{pub.Title} has no root Structure Group.");
+        return new TreeNode(root.IdRef, root.Title, NodeType.StructureGroup, true);
+    }
+
+    public async Task<IReadOnlyList<TreeNode>> GetSubStructureGroupsAsync(string structureGroupId)
+    {
+        var items = await _client.GetListAsync(structureGroupId, new CS.OrganizationalItemItemsFilterData { ItemTypes = new[] { CS.ItemType.StructureGroup }, Recursive = false });
+        return items.OrderBy(i => i.Title).Select(i => new TreeNode(i.Id, i.Title, NodeType.StructureGroup, true)).ToList();
+    }
+
+    public async Task<FolderInfo> GetStructureGroupAsync(string structureGroupId)
+    {
+        var sg = (CS.StructureGroupData)await _client.ReadAsync(structureGroupId, ReadOpts);
+        var pubId = PublicationIdOf(structureGroupId);
+        var pub = await _client.ReadAsync(pubId, ReadOpts);
+        return new FolderInfo(sg.Id, sg.Title, pubId, pub.Title, PathFromRoot(LocationPath(sg), sg.Title));
+    }
+
+    public async Task<TreeNode> CreateStructureGroupAsync(string parentStructureGroupId, string title, string directory)
+    {
+        var sg = (CS.StructureGroupData)await _client.GetDefaultDataAsync(CS.ItemType.StructureGroup, parentStructureGroupId, ReadOpts);
+        sg.Title = title.Trim();
+        sg.Directory = directory;                                                                                   // VERIFY: StructureGroupData.Directory
+        await EnsureMetadataAsync(sg, parentStructureGroupId);
+        var created = await _client.CreateAsync(sg, ReadOpts);
+        return new TreeNode(created.Id, created.Title, NodeType.StructureGroup, false);
+    }
+
+    public async Task<string> CreateComponentAsync(string folderId, ComponentWriteModel model)
+    {
+        var c = (CS.ComponentData)await _client.GetDefaultDataAsync(CS.ItemType.Component, folderId, ReadOpts);
+        c.Title = model.Title;
+        c.Schema = new CS.LinkToSchemaData { IdRef = InContextId(model.SchemaId, folderId) };
+        c.Content = InContext(model.Content, folderId);
+        // A component's metadata fields live in its own schema – if that schema (as it is in the CMS) has any. Always set
+        // both: the folder's default data can carry metadata for another schema.
+        (c.MetadataSchema, c.Metadata) = await ComponentMetadataAsync(c.Schema.IdRef, model.Metadata, folderId);
+        var created = await _client.CreateAsync(c, ReadOpts);
+        await TryCheckInAsync(created.Id, model.CheckInComment);
+        return created.Id;
+    }
+
+    public async Task<string> CreateMultimediaComponentAsync(string folderId, MultimediaWriteModel model)
+    {
+        var path = await UploadAsync(model.FileName, model.Data);
+        var c = (CS.ComponentData)await _client.GetDefaultDataAsync(CS.ItemType.Component, folderId, ReadOpts);
+        c.Title = model.Title;
+        c.ComponentType = CS.ComponentType.Multimedia;                                                              // VERIFY: ComponentData.ComponentType
+        c.Schema = new CS.LinkToSchemaData { IdRef = InContextId(model.SchemaId, folderId) };
+        (c.MetadataSchema, c.Metadata) = await ComponentMetadataAsync(c.Schema.IdRef, model.Metadata, folderId);
+        c.BinaryContent = new CS.BinaryContentData                                                                  // VERIFY: BinaryContentData members
+        {
+            UploadFromFile = path,
+            Filename = model.FileName,
+            MultimediaType = new CS.LinkToMultimediaTypeData { IdRef = model.MultimediaTypeId }   // tcm:0-… (system-wide), not rewritten
+        };
+        var created = await _client.CreateAsync(c, ReadOpts);
+        await TryCheckInAsync(created.Id, model.CheckInComment);
+        return created.Id;
+    }
+
+    /// <summary>Gets the file to a path the Content Manager can read: a configured shared folder, or the stream upload endpoint.</summary>
+    private async Task<string> UploadAsync(string fileName, byte[] data)
+    {
+        if (!string.IsNullOrWhiteSpace(_options.MultimediaUploadShare))
+        {
+            var dir = Path.Combine(_options.MultimediaUploadShare, Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            var target = Path.Combine(dir, Path.GetFileName(fileName));
+            await File.WriteAllBytesAsync(target, data);
+            return target;
+        }
+        var url = string.IsNullOrWhiteSpace(_options.StreamUploadUrl)
+            ? System.Text.RegularExpressions.Regex.Replace(_endpoint, @"/(basicHttp|wsHttp)[^/]*$", "/streamUpload_basicHttp", System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+            : _options.StreamUploadUrl!;
+        // Per the CMS WSDL this endpoint is anonymous and MTOM-encoded – not the Windows-authenticated text binding of the
+        // main Core Service endpoint (re-using that one fails with "request streaming cannot be used with HTTP authentication"
+        // or a multipart/related reply the client cannot read).
+        var binding = new BasicHttpBinding(url.StartsWith("https", StringComparison.OrdinalIgnoreCase) ? BasicHttpSecurityMode.Transport : BasicHttpSecurityMode.None)
+        {
+            MaxReceivedMessageSize = Math.Max(1024 * 1024, data.LongLength * 2 + 1024 * 1024),
+            MaxBufferSize = (int)Math.Min(int.MaxValue, Math.Max(1024 * 1024, data.LongLength * 2 + 1024 * 1024)),
+            SendTimeout = TimeSpan.FromMinutes(5),
+            ReceiveTimeout = TimeSpan.FromMinutes(5),
+        };
+        binding.Security.Transport.ClientCredentialType = HttpClientCredentialType.None;
+        binding.ReaderQuotas.MaxArrayLength = int.MaxValue;
+        binding.ReaderQuotas.MaxStringContentLength = int.MaxValue;
+        // MTOM: set through reflection so this compiles with any WCF client package; without it the reply cannot be read.
+        if (binding.GetType().GetProperty("MessageEncoding") is { CanWrite: true } enc && enc.PropertyType.IsEnum
+            && Enum.GetNames(enc.PropertyType).Contains("Mtom"))
+            enc.SetValue(binding, Enum.Parse(enc.PropertyType, "Mtom"));
+        else
+            throw new InvalidOperationException("The WCF client in use has no MTOM support, which the CMS upload endpoint requires. " +
+                "Set Tridion:MultimediaUploadShare to a folder both Modelry and the Content Manager can read instead.");
+
+        var factory = new ChannelFactory<IStreamUpload>(binding, new EndpointAddress(url));
+        var client = factory.CreateChannel();
+        try
+        {
+            var path = await client.UploadBinaryByteArrayAsync(await AccessTokenAsync(), data);
+            if (string.IsNullOrWhiteSpace(path)) throw new InvalidOperationException("The CMS upload endpoint returned no file path.");
+            return path;
+        }
+        finally
+        {
+            if (client is ICommunicationObject co) { try { co.Close(); } catch { co.Abort(); } }
+            try { factory.Close(); } catch { factory.Abort(); }
+        }
+    }
+
+    private CS.AccessTokenData? _accessToken;
+    private DateTime _accessTokenAt;
+
+    /// <summary>
+    /// The signed access token of the connected user, from GetCurrentUser on the authenticated Core Service endpoint. The
+    /// anonymous upload endpoint needs it to know who is uploading. Cached for a few minutes (tokens are short-lived).
+    /// </summary>
+    private async Task<CS.AccessTokenData> AccessTokenAsync()
+    {
+        if (_accessToken is { } t && DateTime.UtcNow - _accessTokenAt < TimeSpan.FromMinutes(10)) return t;
+        var user = await _client.GetCurrentUserAsync();                                                            // VERIFY: returns AccessTokenData (2013 SP1+ API)
+        _accessTokenAt = DateTime.UtcNow;
+        return _accessToken = user as CS.AccessTokenData
+            ?? throw new InvalidOperationException("The Core Service did not return an access token for the current user (GetCurrentUser), " +
+                "which the upload endpoint requires. Set Tridion:MultimediaUploadShare to a folder both Modelry and the Content Manager can read instead.");
+    }
+
+    /// <summary>
+    /// Metadata to send for a component of the given schema, matched to the schema as it is in the CMS: none (and no
+    /// metadata schema) when the CMS schema has no metadata fields, otherwise the IA's metadata re-rooted in the CMS
+    /// schema's namespace with only the fields the CMS schema defines. When the schema has metadata fields, a
+    /// &lt;Metadata&gt; root is always sent – even with no values – because the CM rejects a component whose schema has
+    /// metadata but whose metadata is missing ("Unable to find {namespace}:Metadata").
+    /// </summary>
+    private async Task<(CS.LinkToSchemaData Schema, string? Xml)> ComponentMetadataAsync(string schemaId, string? metadata, string contextId)
+    {
+        var none = new CS.LinkToSchemaData { IdRef = "tcm:0-0-0" };
+        var sf = await _client.ReadSchemaFieldsAsync(schemaId, false, ReadOpts);
+        var defined = (sf.MetadataFields ?? Array.Empty<CS.ItemFieldDefinitionData>()).Select(f => f.Name).ToList();
+        if (defined.Count == 0) return (none, null);
+        XNamespace ns = sf.NamespaceUri ?? "";
+        var root = new XElement(ns + "Metadata", new XAttribute(XNamespace.Xmlns + "xlink", "http://www.w3.org/1999/xlink"));
+        if (!string.IsNullOrWhiteSpace(metadata))
+        {
+            var source = XElement.Parse(InContext(metadata, contextId));
+            foreach (var name in defined)                               // schema order
+                foreach (var e in source.Elements().Where(e => e.Name.LocalName == name))
+                    root.Add(Renamespace(e, source.Name.Namespace, ns));
+        }
+        return (new CS.LinkToSchemaData { IdRef = schemaId }, root.ToString(SaveOptions.DisableFormatting));
+    }
+
+    /// <summary>
+    /// An item (keyword, folder, Structure Group, category, page) whose metadata schema has fields but which carries no
+    /// metadata gets an empty &lt;Metadata&gt; root in that schema's namespace: the CM rejects it otherwise with
+    /// "Unable to find {namespace}:Metadata". The schema is the item's own MetadataSchema (from its default data), else
+    /// <paramref name="fallbackSchemaId"/> (a category's Keyword Metadata Schema).
+    /// </summary>
+    private async Task EnsureMetadataAsync(object item, string contextId, string? fallbackSchemaId = null)
+    {
+        if (!string.IsNullOrWhiteSpace(Reflect.GetString(item, "Metadata"))) return;
+        var schemaId = (Reflect.Get(item, "MetadataSchema") as CS.LinkToSchemaData)?.IdRef;
+        if (string.IsNullOrEmpty(schemaId) || schemaId == "tcm:0-0-0") schemaId = fallbackSchemaId;
+        if (string.IsNullOrEmpty(schemaId) || schemaId == "tcm:0-0-0") return;
+        if (!contextId.StartsWith("tcm:0-", StringComparison.Ordinal)) schemaId = InContextId(schemaId, contextId);   // a publication URI has no item context
+        var sf = await _client.ReadSchemaFieldsAsync(schemaId, false, ReadOpts);
+        var fields = (sf.MetadataFields ?? Array.Empty<CS.ItemFieldDefinitionData>()).Length > 0 ? sf.MetadataFields! : sf.Fields ?? Array.Empty<CS.ItemFieldDefinitionData>();
+        if (fields.Length == 0) return;
+        XNamespace ns = sf.NamespaceUri ?? "";
+        Reflect.TrySet(item, "MetadataSchema", new CS.LinkToSchemaData { IdRef = schemaId });
+        Reflect.TrySet(item, "Metadata", new XElement(ns + "Metadata").ToString(SaveOptions.DisableFormatting));
+    }
+
+    /// <summary>Moves an element (and its descendants in the same namespace) to another namespace; xlink etc. are kept.</summary>
+    private static XElement Renamespace(XElement e, XNamespace fromNs, XNamespace toNs) =>
+        new XElement(e.Name.Namespace == fromNs ? toNs + e.Name.LocalName : e.Name,
+            e.Attributes().Where(a => !a.IsNamespaceDeclaration || a.Value != fromNs.NamespaceName),
+            e.Nodes().Select(n => n is XElement c ? Renamespace(c, fromNs, toNs) : n));
+
+    public async Task<string> CreatePageAsync(string structureGroupId, PageWriteModel model)
+    {
+        var p = (CS.PageData)await _client.GetDefaultDataAsync(CS.ItemType.Page, structureGroupId, ReadOpts);
+        p.Title = model.Title;
+        p.FileName = model.FileName;
+        p.PageTemplate = new CS.LinkToPageTemplateData { IdRef = InContextId(model.PageTemplateId, structureGroupId) };
+        Reflect.TrySet(p, "IsPageTemplateInherited", false);                                                         // VERIFY: PageData.IsPageTemplateInherited
+        if (model.MetadataSchemaId is not null && model.Metadata is not null)
+        {
+            p.MetadataSchema = new CS.LinkToSchemaData { IdRef = InContextId(model.MetadataSchemaId, structureGroupId) };
+            p.Metadata = InContext(model.Metadata, structureGroupId);
+        }
+        // Tridion 10 native regions: one EmbeddedRegionData per region, with its component presentations.
+        // The proxy may type these as arrays or as collection classes (e.g. RegionList), so they are set through
+        // Reflect.SetCollection, which handles both.
+        var regions = model.Regions.Select(r =>
+        {
+            var region = new CS.EmbeddedRegionData { RegionName = r.Name };
+            Reflect.SetCollection(region, "ComponentPresentations", r.Presentations.Select(cp => new CS.ComponentPresentationData
+            {
+                Component = new CS.LinkToComponentData { IdRef = InContextId(cp.ComponentId, structureGroupId) },
+                ComponentTemplate = new CS.LinkToComponentTemplateData { IdRef = InContextId(cp.ComponentTemplateId, structureGroupId) }
+            }).ToList());
+            if (r.RegionSchemaId is not null) Reflect.TrySet(region, "RegionSchema", new CS.LinkToSchemaData { IdRef = InContextId(r.RegionSchemaId, structureGroupId) });  // VERIFY: EmbeddedRegionData.RegionSchema
+            return region;
+        }).ToList();
+        Reflect.SetCollection(p, "Regions", regions);
+        await EnsureMetadataAsync(p, structureGroupId);
+        var created = await _client.CreateAsync(p, ReadOpts);
+        await TryCheckInAsync(created.Id, model.CheckInComment);
+
+        // The CM can save a page without the presentations it was given (e.g. a region the Page Template's page schema
+        // names differently, or a Page Template without a page schema). Check what was saved and repair if needed.
+        var expected = model.Regions.Sum(r => r.Presentations.Count);
+        if (expected > 0 && (await GetPagePresentationCountsAsync(created.Id)).Values.Sum() == 0)
+            await RepairPagePresentationsAsync(created.Id, structureGroupId, model);
+        return created.Id;
+    }
+
+    public async Task<IReadOnlyDictionary<string, int>> GetPagePresentationCountsAsync(string pageId)
+    {
+        var page = await _client.ReadAsync(pageId, ReadOpts);
+        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        void Walk(object? regions, string prefix)
+        {
+            if (regions is not System.Collections.IEnumerable list) return;
+            foreach (var r in list)
+            {
+                var name = prefix + (Reflect.GetString(r, "RegionName") ?? "?");
+                counts[name] = (Reflect.Get(r, "ComponentPresentations") as System.Collections.IEnumerable)?.Cast<object>().Count() ?? 0;
+                Walk(Reflect.Get(r, "Regions"), name + "/");
+            }
+        }
+        Walk(Reflect.Get(page, "Regions"), "");
+        var top = (Reflect.Get(page, "ComponentPresentations") as System.Collections.IEnumerable)?.Cast<object>().Count() ?? 0;
+        if (top > 0) counts[""] = top;
+        return counts;
+    }
+
+    /// <summary>
+    /// Puts the presentations on a saved page that came back empty: first into the page's own regions (matched by name,
+    /// ignoring case, as the CM created them from the page schema); if the page still has none, into the page's
+    /// top-level component presentations, where DXA places them by the region named in each CT's metadata.
+    /// </summary>
+    private async Task RepairPagePresentationsAsync(string pageId, string contextId, PageWriteModel model)
+    {
+        CS.ComponentPresentationData Cp(PresentationWriteModel cp) => new()
+        {
+            Component = new CS.LinkToComponentData { IdRef = InContextId(cp.ComponentId, contextId) },
+            ComponentTemplate = new CS.LinkToComponentTemplateData { IdRef = InContextId(cp.ComponentTemplateId, contextId) }
+        };
+        async Task UpdateAsync(Action<CS.PageData> change)
+        {
+            var p = (CS.PageData)await _client.CheckOutAsync(pageId, true, ReadOpts);
+            try
+            {
+                change(p);
+                await _client.UpdateAsync(p, ReadOpts);
+            }
+            catch
+            {
+                try { await _client.UndoCheckOutAsync(pageId, true, ReadOpts); } catch { /* best effort */ }
+                throw;
+            }
+            await TryCheckInAsync(pageId, model.CheckInComment);
+        }
+
+        await UpdateAsync(p =>
+        {
+            var existing = (Reflect.Get(p, "Regions") as System.Collections.IEnumerable)?.Cast<object>().ToList() ?? new List<object>();
+            foreach (var r in model.Regions.Where(r => r.Presentations.Count > 0))
+                if (existing.FirstOrDefault(e => string.Equals(Reflect.GetString(e, "RegionName"), r.Name, StringComparison.OrdinalIgnoreCase)) is { } target)
+                    Reflect.SetCollection(target, "ComponentPresentations", r.Presentations.Select(Cp).ToList());
+            if (existing.Count > 0) Reflect.SetCollection(p, "Regions", existing);
+        });
+        if ((await GetPagePresentationCountsAsync(pageId)).Values.Sum() > 0) return;
+
+        if (typeof(CS.PageData).GetProperty("ComponentPresentations") is null) return;
+        await UpdateAsync(p => Reflect.SetCollection(p, "ComponentPresentations", model.Regions.SelectMany(r => r.Presentations).Select(Cp).ToList()));
+    }
+
     private async Task TryCheckInAsync(string id, string comment)
     {
         try { await _client.CheckInAsync(id, true, comment, ReadOpts); }
         catch (FaultException) { /* Create/Update may already have checked the item in */ }
+    }
+
+    /// <summary>
+    /// The same item seen from the publication of <paramref name="contextItemId"/>. In a BluePrint an item keeps its item
+    /// number in every child publication; only the publication part of the URI changes (tcm:4-49716-8 → tcm:1010-49716-8).
+    /// System-wide ids (tcm:0-…) are left alone.
+    /// </summary>
+    private static string InContextId(string tcmUri, string contextItemId)
+    {
+        var pub = contextItemId.Split(':')[1].Split('-')[0];
+        return System.Text.RegularExpressions.Regex.Replace(tcmUri, @"^tcm:(?!0-)\d+-", $"tcm:{pub}-");
+    }
+
+    /// <summary>Rewrites every xlink:href TCM URI in content or metadata XML into the context publication.</summary>
+    private static string InContext(string xml, string contextItemId)
+    {
+        var pub = contextItemId.Split(':')[1].Split('-')[0];
+        return System.Text.RegularExpressions.Regex.Replace(xml, @"(xlink:href="")tcm:(?!0-)\d+-", $"${1}tcm:{pub}-");
     }
 
     private static string PublicationIdOf(string tcmUri)
