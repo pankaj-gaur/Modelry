@@ -7,7 +7,7 @@ namespace Modelry.Core.Gateway;
 /// Demo-mode gateway: an in-memory "Tridion" so the UI, export and import can be tried without a CMS.
 /// Thread-safe enough for a single demo instance; state is lost on restart.
 /// </summary>
-public sealed class InMemoryTridionGateway : ITridionGateway
+public sealed partial class InMemoryTridionGateway : ITridionGateway, Modelry.Core.Audit.IAuditGateway
 {
     private sealed class Item
     {

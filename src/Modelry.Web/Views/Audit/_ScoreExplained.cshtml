@@ -1,0 +1,172 @@
+@model AuditSnapshot
+@using System.Globalization
+@*
+    "How is this score calculated?" – the method, worked through with this audit's own numbers.
+    Rendered inside the score dialog on the dashboard.
+*@
+@{
+    var s = Model;
+    var health = s.Health!;
+    var inv = CultureInfo.InvariantCulture;
+    var aem = AuditCms.IsAem(s.Cms);
+    var scored = s.Rules.Where(r => r.CountsTowardsScore).ToList();
+    var areas = Enum.GetValues<FindingCategory>()
+        .Select(c => (Cat: c, Value: health.Categories.GetValueOrDefault(c), Rules: scored.Where(r => r.Category == c).ToList()))
+        .Where(a => a.Value is not null).ToList();
+    var example = scored.OrderByDescending(r => r.Affected > 0).ThenByDescending(r => r.Population).FirstOrDefault();
+    var exampleArea = areas.Where(a => a.Rules.Count >= 2).OrderByDescending(a => a.Rules.Any(r => r.Affected > 0)).ThenBy(a => a.Value)
+        .Select(a => ((FindingCategory, int?, List<RuleResult>)?)a).FirstOrDefault();
+    var notRun = s.Rules.Where(r => !r.Evaluated && r.NotEvaluatedReason?.StartsWith("Replaced") != true).ToList();
+    var reviewOnly = s.Rules.Where(r => r.Evaluated && !r.Scored && r.NotScoredReason != AuditRules.UsageStandardReason).ToList();
+    var usageLeftOut = AuditRules.NotScoredInThisScan(s, FindingCategory.Usage);
+    var itemsWord = aem ? "pages, fragments or assets" : "pages or components";
+    string Pct(double v) => (100 * v).ToString("0", inv) + "%";
+    string W(double v) => v.ToString("0", inv);
+}
+
+<div class="score-explain">
+    <p class="score-explain__lead">
+        This audit scored <b>@health.Overall / 100</b>, <span class="grade grade--@health.Grade">Grade @health.Grade</span>.
+        The score shows <b>what share of the items pass each check</b> – it is not a count of problems.
+        Below is exactly how this number was reached, using this audit's own results.
+    </p>
+
+    <h3><span class="score-explain__no">1</span> Each check gets a score</h3>
+    <p class="score-explain__formula">Check score = items not flagged ÷ items checked</p>
+    @if (example is not null)
+    {
+        <p>
+            Example from this audit – <b>@example.Title</b>: @example.Population.ToString("N0") checked, @example.Affected.ToString("N0") flagged, so
+            (@example.Population.ToString("N0") − @example.Affected.ToString("N0")) ÷ @example.Population.ToString("N0") = <b>@Pct(example.Score)</b>.
+        </p>
+    }
+    <p class="muted small">A check that flags nothing scores 100%; one that flags every item it looks at scores 0%.</p>
+
+    <h3><span class="score-explain__no">2</span> Checks are weighted by severity</h3>
+    <table class="data score-explain__table">
+        <thead><tr><th>Severity</th><th class="n">Weight</th><th>Used for</th></tr></thead>
+        <tbody>
+            <tr><td><span class="sev sev--Error">Error</span></td><td class="n">3</td><td>Breaks the site or publishing – for example two pages publishing to the same URL.</td></tr>
+            <tr><td><span class="sev sev--Warning">Warning</span></td><td class="n">2</td><td>Likely to cause problems for editors or visitors – for example published content that is out of date.</td></tr>
+            <tr><td><span class="sev sev--Info">Info</span></td><td class="n">1</td><td>Housekeeping worth reviewing – for example temporary-looking names.</td></tr>
+        </tbody>
+    </table>
+
+    <h3><span class="score-explain__no">3</span> Each area is the weighted average of its checks</h3>
+    <p class="score-explain__formula">Area score = (weight × check score, added up) ÷ (weights added up)</p>
+    @if (exampleArea is { } ea)
+    {
+        var (cat, value, rules) = ea;
+        <p>
+            Example – <b>@AuditRules.CategoryTitle(cat)</b>:
+            (@string.Join(" + ", rules.Select(r => $"{W(r.Weight)} × {Pct(r.Score)}")))
+            ÷ (@string.Join(" + ", rules.Select(r => W(r.Weight)))) = <b>@value</b>.
+        </p>
+    }
+    <p class="muted small">Check scores are shown rounded; the calculation uses the exact values. Open an area to see every check that went into it.</p>
+    @foreach (var (cat, value, rules) in areas)
+    {
+        <details class="score-explain__area">
+            <summary><span>@AuditRules.CategoryTitle(cat)</span><b>@value</b></summary>
+            <div class="table-wrap">
+                <table class="data score-explain__table">
+                    <thead><tr><th>Check</th><th>Severity</th><th class="n">Weight</th><th class="n">Checked</th><th class="n">Flagged</th><th class="n">Check score</th><th class="n">Weight × score</th></tr></thead>
+                    <tbody>
+                    @foreach (var r in rules)
+                    {
+                        <tr>
+                            <td>@r.Title</td>
+                            <td><span class="sev sev--@r.Severity">@r.Severity</span></td>
+                            <td class="n">@W(r.Weight)</td>
+                            <td class="n">@r.Population.ToString("N0")</td>
+                            <td class="n">@r.Affected.ToString("N0")</td>
+                            <td class="n">@Pct(r.Score)</td>
+                            <td class="n">@((r.Weight * r.Score).ToString("0.00", inv))</td>
+                        </tr>
+                    }
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="2">Area score</td>
+                            <td class="n">@W(rules.Sum(r => r.Weight))</td>
+                            <td colspan="3"></td>
+                            <td class="n">@rules.Sum(r => r.Weight * r.Score).ToString("0.00", inv) ÷ @W(rules.Sum(r => r.Weight)) = <b>@value</b></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </details>
+    }
+
+    <h3><span class="score-explain__no">4</span> The overall score is the average of the areas</h3>
+    @if (areas.Count > 0)
+    {
+        var avg = areas.Average(a => a.Value!.Value);
+        <p class="score-explain__formula">
+            (@string.Join(" + ", areas.Select(a => a.Value!.Value.ToString(inv)))) ÷ @areas.Count = @if (Math.Abs(avg - health.Overall) < 0.05) { <b>@health.Overall</b> } else { @avg.ToString("0.#", inv)<text> → </text><b>@health.Overall</b> }
+        </p>
+        <p>
+            Every area counts the same, however many items it holds
+            (@string.Join(", ", areas.Select(a => AuditRules.CategoryTitle(a.Cat).ToLowerInvariant()))).
+            @if (usageLeftOut)
+            {
+                <text><b>Usage is not included:</b> it is scored only in a deep scan, because a standard scan does not read the links between items and so cannot tell whether an item is really unused.</text>
+            }
+        </p>
+    }
+
+    <h3><span class="score-explain__no">5</span> Grades</h3>
+    <table class="data score-explain__table">
+        <thead><tr><th>Grade</th><th>Score</th><th>What it means</th></tr></thead>
+        <tbody>
+        @{ var upper = 100; }
+        @foreach (var (grade, from, meaning) in HealthScore.Bands)
+        {
+            <tr class="@(grade == health.Grade ? "score-explain__current" : "")">
+                <td><span class="grade grade--@grade">@grade</span></td>
+                <td>@from–@upper</td>
+                <td>@meaning@(grade == health.Grade ? " ← this audit" : "")</td>
+            </tr>
+            upper = from - 1;
+        }
+        </tbody>
+    </table>
+
+    @if (notRun.Count > 0 || reviewOnly.Count > 0 || usageLeftOut)
+    {
+        <h3>What is left out</h3>
+        <p>These never count as a pass or a fail, so they do not raise or lower the score.</p>
+        <ul class="score-explain__list">
+            @if (usageLeftOut)
+            {
+                <li><b>Usage checks</b> – shown under Findings as review lists, scored only when you run a deep scan.</li>
+            }
+            @foreach (var r in reviewOnly)
+            {
+                <li><b>@r.Title</b> – @r.NotScoredReason</li>
+            }
+            @if (notRun.Where(r => r.NeedsDeepScan).ToList() is { Count: > 0 } deepOnly)
+            {
+                <li><b>Need a deep scan</b> – @string.Join(", ", deepOnly.Select(r => r.Title)).</li>
+            }
+            @foreach (var r in notRun.Where(r => !r.NeedsDeepScan))
+            {
+                <li><b>@r.Title</b> – could not run: @r.NotEvaluatedReason</li>
+            }
+        </ul>
+    }
+
+    <h3>What to do with it</h3>
+    <ul class="score-explain__list">
+        <li><b>Work from the Findings, not the number.</b> Fix Errors first, then Warnings; treat Info as housekeeping to review with the content owners.</li>
+        <li><b>Look at the weakest area.</b> It shows where the effort will pay off most – a good overall score can hide one weak area.</li>
+        <li><b>Track it over time.</b> Re-run the audit after a clean-up or every quarter and use <i>Compare</i>. Compare audits of the same scan type (standard with standard, deep with deep).</li>
+    </ul>
+
+    <h3>Reading the score well</h3>
+    <ul class="score-explain__list">
+        <li>The score is a share of items, so one Error among hundreds of @itemsWord barely moves it – always read the Errors in Findings, whatever the score.</li>
+        <li>Small numbers swing: 1 flagged out of 2 checked is already a 50% check score.</li>
+        <li>The checks look at how the CMS is set up and kept, not at the quality of the content itself.</li>
+    </ul>
+</div>

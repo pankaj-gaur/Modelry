@@ -1,0 +1,72 @@
+@inject TridionSession Cms
+@{
+    ViewData["Title"] = "What would you like to do?";
+    var caps = Cms.Capabilities;
+}
+<section class="start-band start-band--short">
+    <div class="start-band__inner">
+        <h1>What would you like to do?</h1>
+        <p>Connected to @(Cms.IsDemo ? "the demo CMS" : Cms.Host) · <span class="version-badge version-badge--dark">@caps.Display</span></p>
+    </div>
+</section>
+<div class="start-cards">
+    <article class="cms-card">
+        <div class="cms-card__top">
+            <h2>Build from an IA workbook</h2>
+            @if (Cms.IsAem)
+            {
+                <span class="cms-card__status">Preview</span>
+            }
+            else
+            {
+                <span class="cms-card__status @(caps.BuildUntested ? "" : "cms-card__status--ready")">@(caps.BuildUntested ? "Tested on 10.x" : "Full support")</span>
+            }
+        </div>
+        <p class="muted">Create the content model your Information Architecture workbook describes.</p>
+        @if (Cms.IsAem)
+        {
+            <ul>
+                <li>Validate your workbook against AEM</li>
+                <li>See how schemas map to Content Fragment Models, tags and templates</li>
+                <li>Creating them in AEM is the next release</li>
+            </ul>
+        }
+        else
+        {
+            <ul>
+                <li>Schemas, categories and keywords, checked before anything is created</li>
+                <li>Component and Page Templates from your DXA base templates</li>
+                <li>DXA view models, views and pages</li>
+            </ul>
+        }
+        @if (caps.BuildUntested)
+        {
+            <p class="small warn-text">Creating items is tested on Tridion Sites 10. On @caps.Display, check the results in the CMS before relying on them.</p>
+        }
+        <a class="btn btn--primary" asp-controller="Wizard" asp-action="Upload">Start building</a>
+    </article>
+    <article class="cms-card">
+        <div class="cms-card__top">
+            <h2>Audit an existing site</h2>
+            <span class="cms-card__status cms-card__status--ready">Read-only</span>
+        </div>
+        <p class="muted">See what @(Cms.IsAem ? "a site" : "a publication") holds, without changing anything.</p>
+        @if (Cms.IsAem)
+        {
+            <ul>
+                <li>Counts of pages, site sections, templates, components, Content Fragment Models, fragments, assets and tags</li>
+                <li>Published and unpublished per tier (Publish, Preview), MSM live copies, last change</li>
+                <li>Health score, findings, saved audits to compare, Excel export</li>
+            </ul>
+        }
+        else
+        {
+        <ul>
+            <li>Counts of schemas, templates, components, multimedia, taxonomy, Structure Groups and pages</li>
+            <li>Published and unpublished components and pages, BluePrint origin, last change</li>
+            <li>Every item in a filterable table, full detail on click, Excel export</li>
+        </ul>
+        }
+        <a class="btn btn--primary" asp-controller="Audit" asp-action="Index">Start an audit</a>
+    </article>
+</div>

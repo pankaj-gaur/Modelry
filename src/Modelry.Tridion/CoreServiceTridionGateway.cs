@@ -19,7 +19,7 @@ namespace Modelry.Tridion;
 /// ITridionGateway over the Tridion Core Service (proxy generated with dotnet-svcutil).
 /// Lines marked "VERIFY" use API members to confirm against your generated proxy on first build / dry run.
 /// </summary>
-public sealed class CoreServiceTridionGateway : ITridionGateway, IDisposable
+public sealed partial class CoreServiceTridionGateway : ITridionGateway, Modelry.Core.Audit.IAuditGateway, IDisposable
 {
     private readonly ChannelFactory<CoreServiceContract> _factory;
     private readonly CoreServiceContract _client;

@@ -1,0 +1,219 @@
+@model AuditReportViewModel
+@using System.Globalization
+@*
+    Printable audit report: "Export to PDF" opens it in a new tab and the browser's print dialog saves it as PDF.
+    Self-contained (no app header or navigation); styles in wwwroot/css/report.css.
+*@
+@{
+    Layout = null;
+    var s = Model.Snapshot;
+    var ai = Model.Summary;
+    var aem = AuditCms.IsAem(s.Cms);
+    var noun = aem ? "Site" : "Publication";
+    var health = s.Health;
+    var inv = CultureInfo.InvariantCulture;
+    var finished = s.FinishedUtc.ToLocalTime();
+    var fileTitle = $"Modelry audit – {s.PublicationTitle} – {finished:yyyy-MM-dd}";
+    var areas = Enum.GetValues<FindingCategory>().ToList();
+    string Pct(double v) => (100 * v).ToString("0", inv) + "%";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@fileTitle</title>
+    <link rel="icon" href="~/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="~/css/report.css" asp-append-version="true" />
+</head>
+<body>
+<div class="toolbar no-print" role="region" aria-label="Report actions">
+    <p>This report is ready to save as PDF. In the print dialog choose <b>Save as PDF</b> as the destination.</p>
+    <button type="button" class="btn btn--primary" id="print">Save as PDF</button>
+    <a class="btn" asp-action="Dashboard" asp-route-id="@Model.JobId">Back to the dashboard</a>
+</div>
+
+<main class="report">
+    <header class="report__head">
+        <div class="report__brand"><img src="~/img/modelry-mark.svg" alt="" width="28" height="28" /> Modelry · CMS audit report</div>
+        <h1>@s.PublicationTitle</h1>
+        <dl class="report__meta">
+            <div><dt>@noun</dt><dd>@s.PublicationId</dd></div>
+            <div><dt>CMS</dt><dd>@s.Capabilities.Display@(s.CmsHost.Length > 0 ? $" · {s.CmsHost}" : "")</dd></div>
+            <div><dt>Audited</dt><dd>@finished.ToString("d MMMM yyyy, HH:mm")@(s.RunBy.Length > 0 ? $" by {s.RunBy}" : "")</dd></div>
+            <div><dt>Scan</dt><dd>@(s.Deep ? "Deep (includes unused content)" : "Standard") · @((s.FinishedUtc - s.StartedUtc).TotalSeconds.ToString("0", inv)) s · @s.Items.Values.Sum(v => v.Count).ToString("N0") items</dd></div>
+        </dl>
+    </header>
+
+    @if (ai is not null)
+    {
+        <section class="block block--ai">
+            <h2>Executive summary</h2>
+            @{ var e = ai.English; }
+            @if (e is not null)
+            {
+                @if (e.Status.Length > 0) { <span class="status status--@e.Status.ToLowerInvariant().Replace(' ', '-')">@e.Status</span> }
+                <p class="ai__headline">@e.Headline</p>
+                <p>@e.Summary</p>
+                @if (e.Actions.Count > 0)
+                {
+                    <h3>Next steps</h3>
+                    <ol class="ai__actions">
+                        @foreach (var a in e.Actions) { <li><span class="prio prio--@a.Priority.ToLowerInvariant()">@a.Priority</span> @a.Action</li> }
+                    </ol>
+                }
+                @if (e.Decision.Length > 0) { <div class="ai__decision"><h3>Decision</h3><p>@e.Decision</p></div> }
+            }
+            else
+            {
+                <p>@ai.EnglishText</p>
+            }
+            @if (ai.HasTranslation)
+            {
+                var t = ai.Translated;
+                var rtl = System.Text.RegularExpressions.Regex.IsMatch(ai.Language ?? "", "^(ar|he|fa|ur|ps|yi)(-|$)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                <div class="ai__translation" lang="@ai.Language" dir="@(rtl ? "rtl" : "auto")">
+                    <h3>@ai.LanguageName</h3>
+                    @if (t is not null)
+                    {
+                        <p class="ai__headline">@t.Headline</p>
+                        <p>@t.Summary</p>
+                        @if (t.Actions.Count > 0) { <ol class="ai__actions">@foreach (var a in t.Actions) { <li><span class="prio prio--@a.Priority.ToLowerInvariant()">@a.Priority</span> @a.Action</li> }</ol> }
+                        @if (t.Decision.Length > 0) { <p><b>@t.Decision</b></p> }
+                    }
+                    else { <p>@ai.TranslatedText</p> }
+                </div>
+            }
+            <p class="note">AI-generated from this audit's scores and counts on @ai.CreatedUtc.ToLocalTime().ToString("d MMM yyyy, HH:mm")@(ai.CreatedBy.Length > 0 ? $" by {ai.CreatedBy}" : "") (@ai.Words words). Check it before sharing.</p>
+        </section>
+    }
+
+    @if (health is not null)
+    {
+        <section class="block">
+            <h2>Health score</h2>
+            <div class="health">
+                <div class="health__score"><span class="health__value">@health.Overall</span><span>/ 100</span><span class="grade grade--@health.Grade">Grade @health.Grade</span></div>
+                <table class="areas">
+                    <tbody>
+                    @foreach (var cat in areas)
+                    {
+                        var value = health.Categories.GetValueOrDefault(cat);
+                        var notScored = AuditRules.NotScoredInThisScan(s, cat);
+                        <tr>
+                            <th scope="row">@AuditRules.CategoryTitle(cat)</th>
+                            <td class="bar">@if (value is not null && !notScored) { <span class="bar__track"><span class="grade-bg--@HealthScore.GradeOf(value.Value)" style="width:@value%"></span></span> }</td>
+                            <td class="n">@(notScored ? "scored in a deep scan" : value?.ToString(inv) ?? "not checked")</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+            <p class="note">
+                Each check scores the share of items it did not flag. An area is the average of its checks, weighted by severity
+                (Error 3, Warning 2, Info 1); the overall score is the average of the areas.
+                Grades: A 90+, B 75–89, C 60–74, D 40–59, E below 40. Checks that could not run are left out@(s.Deep ? "" : ", and usage is scored only in a deep scan").
+                Scored on @s.Rules.Count(r => r.CountsTowardsScore) of @s.Rules.Count checks.
+            </p>
+        </section>
+    }
+
+    <section class="block">
+        <h2>Building blocks</h2>
+        <table class="data">
+            <thead><tr><th>Building block</th><th class="n">Total</th><th class="n">Published</th><th class="n">Not published</th><th class="n">@AuditCatalog.Origin(BluePrintOrigin.Local, s.Cms)</th><th class="n">@AuditCatalog.Origin(BluePrintOrigin.Shared, s.Cms)</th><th class="n">@AuditCatalog.Origin(BluePrintOrigin.Localized, s.Cms)</th></tr></thead>
+            <tbody>
+            @foreach (var kind in Enum.GetValues<AuditKind>())
+            {
+                var sum = s.Summarize(kind);
+                var pub = AuditCatalog.IsPublishable(kind) && s.UnavailableReason(kind, "publish") is null;
+                <tr>
+                    <th scope="row">@AuditCatalog.Title(kind, s.Cms)</th>
+                    <td class="n">@sum.Total.ToString("N0")</td>
+                    <td class="n">@(pub ? sum.Published.ToString("N0") : "")</td>
+                    <td class="n">@(pub ? sum.Unpublished.ToString("N0") : "")</td>
+                    <td class="n">@sum.Local.ToString("N0")</td>
+                    <td class="n">@sum.Shared.ToString("N0")</td>
+                    <td class="n">@sum.Localized.ToString("N0")</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </section>
+
+    <section class="block">
+        <h2>Checks</h2>
+        <table class="data checks">
+            <thead><tr><th>Area</th><th>Severity</th><th>Check</th><th class="n">Flagged</th><th class="n">Checked</th><th class="n">Check score</th></tr></thead>
+            <tbody>
+            @foreach (var r in s.Rules.Where(r => r.Evaluated).OrderBy(r => r.Category).ThenByDescending(r => r.Severity).ThenByDescending(r => r.Affected))
+            {
+                <tr class="@(r.Affected > 0 ? "hit" : "")">
+                    <td>@AuditRules.CategoryTitle(r.Category)</td>
+                    <td><span class="sev sev--@r.Severity">@r.Severity</span></td>
+                    <td>@r.Title@if (!r.Scored) { <span class="tag">not scored</span> }</td>
+                    <td class="n">@r.Affected.ToString("N0")</td>
+                    <td class="n">@r.Population.ToString("N0")</td>
+                    <td class="n">@(r.Population > 0 ? Pct(r.Score) : "–")</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+        @if (s.Rules.Where(r => !r.Evaluated && r.NotEvaluatedReason?.StartsWith("Replaced") != true).ToList() is { Count: > 0 } notRun)
+        {
+            <h3>Checks that could not run</h3>
+            <ul class="plain">
+                @foreach (var r in notRun) { <li><b>@r.Title</b> – @r.NotEvaluatedReason</li> }
+            </ul>
+        }
+    </section>
+
+    @{ var hits = s.Rules.Where(r => r.Evaluated && r.Affected > 0).OrderByDescending(r => r.Severity).ThenBy(r => r.Category).ToList(); }
+    @if (hits.Count > 0)
+    {
+        <section class="block">
+            <h2>Findings</h2>
+            <p class="note">Up to @Model.ItemsPerCheck items per check. The Excel export lists every item.</p>
+            @foreach (var r in hits)
+            {
+                var items = s.Findings.Where(f => f.RuleId == r.Id).OrderBy(f => f.Kind).ThenBy(f => f.Path, StringComparer.OrdinalIgnoreCase).ThenBy(f => f.Title, StringComparer.OrdinalIgnoreCase).ToList();
+                <div class="finding">
+                    <h3><span class="sev sev--@r.Severity">@r.Severity</span> @r.Title <span class="muted">– @r.Affected.ToString("N0") of @r.Population.ToString("N0")</span></h3>
+                    <p class="note">@r.Description</p>
+                    <table class="data items">
+                        <thead><tr><th>Item</th><th>Type</th><th>Location</th><th>Detail</th></tr></thead>
+                        <tbody>
+                        @foreach (var f in items.Take(Model.ItemsPerCheck))
+                        {
+                            <tr><td>@f.Title<span class="id">@f.ItemId</span></td><td>@AuditCatalog.Singular(f.Kind, s.Cms)</td><td>@(f.Path.Length == 0 ? "(root)" : f.Path)</td><td>@f.Message</td></tr>
+                        }
+                        </tbody>
+                    </table>
+                    @if (items.Count > Model.ItemsPerCheck) { <p class="note">… and @((items.Count - Model.ItemsPerCheck).ToString("N0")) more in the Excel export.</p> }
+                </div>
+            }
+        </section>
+    }
+
+    @if (s.Notes.Count > 0)
+    {
+        <section class="block">
+            <h2>Audit notes</h2>
+            <ul class="plain">@foreach (var n in s.Notes) { <li>@n</li> }</ul>
+        </section>
+    }
+
+    <footer class="report__foot">Modelry CMS audit · @s.PublicationTitle · generated @DateTime.Now.ToString("d MMM yyyy, HH:mm") · read-only audit, nothing in the CMS was changed</footer>
+</main>
+
+<script>
+(function () {
+  document.getElementById('print').addEventListener('click', () => window.print());
+  @if (Model.Print)
+  {
+      <text>window.addEventListener('load', () => setTimeout(() => window.print(), 300));</text>
+  }
+})();
+</script>
+</body>
+</html>

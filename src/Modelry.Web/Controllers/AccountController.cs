@@ -51,14 +51,14 @@ public sealed class AccountController : Controller
     {
         vm.DemoAllowed = _o.AllowDemoMode; vm.ProxyAvailable = CoreServiceGatewayFactory.IsAvailable;
         vm.Cms = _session.Cms ?? "tridion";
-        if (_session.IsAem) return await AemLoginAsync(vm, ct);
         if (vm.Demo)
         {
             if (!_o.AllowDemoMode) return Fail(vm, "Demo mode is disabled.");
             _session.SignInDemo();
-            _log.LogInformation("AUDIT login demo from {Ip}", HttpContext.Connection.RemoteIpAddress);
+            _log.LogInformation("AUDIT login demo ({Cms}) from {Ip}", _session.Cms, HttpContext.Connection.RemoteIpAddress);
             return RedirectToAction("Index", "Home");
         }
+        if (_session.IsAem) return await AemLoginAsync(vm, ct);
 
         var oauth = vm.AuthMode == "OAuth";
         var url = vm.CoreServiceUrl?.Trim() ?? "";
@@ -103,12 +103,17 @@ public sealed class AccountController : Controller
                 new CookieOptions { HttpOnly = true, Secure = true, SameSite = SameSiteMode.Strict, Expires = DateTimeOffset.UtcNow.AddDays(30) });
             _log.LogInformation("AUDIT login {Mode} {User} to {Url} (API {Version}){Http}", oauth ? "OAuth" : "Windows", who, url, version,
                 HostGuard.IsHttp(url) ? " over plain HTTP" : "");
+            var caps = Modelry.Core.Gateway.CmsCapabilities.From(version);
+            if (caps.BelowMinimum)
+                TempData["Notice"] = $"This Content Manager reports version {caps.Raw}. Modelry supports Tridion Sites {Modelry.Core.Gateway.CmsCapabilities.Minimum} and later – results may be incomplete.";
             return RedirectToAction("Index", "Home");
         }
         catch (Exception ex)
         {
             _log.LogWarning(ex, "Login failed for {User} to {Url}", oauth ? vm.ClientId : vm.UserName, url);
-            return Fail(vm, $"Connection failed: {Explain(ex)}");
+            return Fail(vm, $"Connection failed: {Explain(ex)}" + (oauth
+                ? " If this Content Manager is older than Tridion Sites 9.5, sign in with Windows authentication – Access Management is not available there."
+                : ""));
         }
     }
 
@@ -122,8 +127,10 @@ public sealed class AccountController : Controller
         if (error is not null) return FailAem(vm, error);
         try
         {
-            var who = await _aem.VerifyAsync(url, useToken, vm.AemUser?.Trim(), useToken ? vm.AemToken!.Trim() : vm.AemPassword!, ct);
-            _session.SignInAem(url, who, useToken ? vm.AemToken!.Trim() : vm.AemPassword!, useToken, "AEM");
+            var secret = useToken ? vm.AemToken!.Trim() : vm.AemPassword!;
+            var who = await _aem.VerifyAsync(url, useToken, vm.AemUser?.Trim(), secret, ct);
+            var version = await _aem.VersionAsync(url, useToken, vm.AemUser?.Trim(), secret, ct);
+            _session.SignInAem(url, useToken ? who : vm.AemUser!.Trim(), secret, useToken, version);
             Response.Cookies.Append(RememberCookie, $"AEM\n{url}\n{vm.AemAuth}\n{(useToken ? "" : vm.AemUser?.Trim())}",
                 new CookieOptions { HttpOnly = true, Secure = true, SameSite = SameSiteMode.Strict, Expires = DateTimeOffset.UtcNow.AddDays(30) });
             _log.LogInformation("AUDIT login AEM {User} to {Url}", who, url);

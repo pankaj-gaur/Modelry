@@ -1,0 +1,19 @@
+@{
+    Layout = "_Layout";
+    // The dashboard uses a wider content column; header and footer follow it so everything lines up.
+    if (ViewData["Step"] as string == "dashboard") ViewData["WidePage"] = true;
+    ViewData["InWizard"] = true;
+}
+<div class="wizard wizard--wide@(ViewData["Step"] as string == "dashboard" ? " wizard--dashboard" : "")">
+    <nav class="rail" aria-label="Audit progress">
+        <partial name="_AuditRail" />
+    </nav>
+    <div class="wizard__main">
+        @if (TempData["Error"] is string err)
+        {
+            <div class="alert alert--error" role="alert"><p>@err</p></div>
+        }
+        @RenderBody()
+    </div>
+</div>
+@section Scripts { @await RenderSectionAsync("Scripts", required: false) }

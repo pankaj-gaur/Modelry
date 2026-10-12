@@ -1,0 +1,148 @@
+@model AuditIndexViewModel
+@{
+    var noun = Model.IsAem ? "site" : "publication";
+    var Noun = Model.IsAem ? "Site" : "Publication";
+    ViewData["Title"] = $"Audit – choose a {noun}";
+    Layout = "_AuditLayout";
+    ViewData["Step"] = "publication";
+    var caps = Model.Capabilities;
+}
+<div class="step-head">
+    <span class="step-no">Audit · Step 3 of 4</span>
+    <h1>Choose the @noun to audit</h1>
+    @if (Model.IsAem)
+    {
+        <p class="lead">Modelry reads the site on the author instance – pages, templates, components, Content Fragment Models, Content and Experience Fragments, assets and tags – and shows what it holds. Nothing is changed or published.</p>
+    }
+    else
+    {
+        <p class="lead">Modelry reads the publication – schemas, templates, components, multimedia, categories, keywords, Structure Groups and pages – and shows what it holds. Nothing is changed or published.</p>
+    }
+</div>
+
+@if (caps.BelowMinimum)
+{
+    <div class="alert alert--warn" role="status"><p>This Content Manager is @caps.Display. Modelry supports Tridion Sites @CmsCapabilities.Minimum and later – the audit will run, but some columns may be empty.</p></div>
+}
+@if (Model.Error is not null)
+{
+    <div class="alert alert--error" role="alert"><p>@Model.Error</p></div>
+}
+
+<form asp-action="Run" method="post" id="audit-start" class="card">
+    <div class="field">
+        <label for="pub-filter">@(Noun)s <span class="muted small">(@Model.Roots.Count)</span></label>
+        <input id="pub-filter" type="search" placeholder="Filter by name or ID" autocomplete="off" />
+    </div>
+    <ul class="pub-list" role="radiogroup" aria-label="@(Noun)s">
+        @foreach (var p in Model.Roots)
+        {
+            <li>
+                <label class="pub-option">
+                    <input type="radio" name="publicationId" value="@p.Id" data-title="@p.Title" required />
+                    <span class="pub-option__title">@p.Title</span>
+                    <span class="pub-option__id">@(p.Detail ?? p.Id)</span>
+                </label>
+            </li>
+        }
+        @if (Model.Roots.Count == 0 && Model.Error is null)
+        {
+            <li class="muted">No @(noun)s visible to this account.</li>
+        }
+    </ul>
+    <input type="hidden" name="publicationTitle" id="pub-title" />
+    @if (Model.IsAem)
+    {
+        <details class="aem-scope">
+            <summary class="btn btn--quiet">Scope: configuration and DAM folders</summary>
+            <p class="muted small">Left empty, Modelry uses the site's <code>cq:conf</code> (or <code>/conf/&lt;site&gt;</code>) and <code>/content/dam/&lt;site&gt;</code>.</p>
+            <div class="row">
+                <div class="field"><label for="confPath">Configuration folder</label><input id="confPath" name="confPath" placeholder="/conf/my-site" /></div>
+                <div class="field"><label for="damPath">DAM folder</label><input id="damPath" name="damPath" placeholder="/content/dam/my-site" /></div>
+            </div>
+        </details>
+    }
+    <label class="check" style="margin-top:var(--s4)">
+        <input type="checkbox" name="deep" value="true" />
+        <span><b>Deep scan</b> – @(Model.IsAem ? "also read every fragment's content to count where fragments, assets and tags are used, to find unused items." : "also read where every component, multimedia component, keyword and category is used, to find unused items.")
+            <span class="muted small">Slower: one extra call per item.</span></span>
+    </label>
+    <div class="actions">
+        <button class="btn btn--primary" type="submit" disabled id="audit-run">Run audit</button>
+        <span class="muted small">Large @(noun)s can take a few minutes – you can follow the progress.</span>
+    </div>
+</form>
+
+@if (Model.Recent.Count > 0)
+{
+    <h2 class="section-title">Audits in this session</h2>
+    <div class="table-wrap">
+        <table class="data">
+            <thead><tr><th>@Noun</th><th>Started</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var j in Model.Recent)
+            {
+                <tr>
+                    <td>@j.PublicationTitle</td>
+                    <td class="muted">@j.StartedUtc.ToLocalTime().ToString("HH:mm")</td>
+                    <td>@(j.State switch { AuditJobState.Running => "Running", AuditJobState.Completed => "Finished", AuditJobState.Cancelled => "Stopped", _ => "Failed" })</td>
+                    <td><a asp-action="Dashboard" asp-route-id="@j.Id">Open</a></td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}
+
+@if (Model.Saved.Count > 0)
+{
+    <h2 class="section-title">Saved audits</h2>
+    <p class="muted small">Audits are saved on the Modelry server so they can be reopened and compared over time.</p>
+    <div class="table-wrap">
+        <table class="data">
+            <thead><tr><th>@Noun</th><th>Finished</th><th>Health</th><th>Items</th><th>Findings</th><th>Scan</th><th>Run by</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var m in Model.Saved.Take(50))
+            {
+                <tr>
+                    <td>@m.PublicationTitle<span class="cell-id">@m.PublicationId</span></td>
+                    <td>@m.FinishedUtc.ToLocalTime().ToString("d MMM yyyy, HH:mm")</td>
+                    <td><span class="grade grade--@m.Grade">@m.Grade</span> @m.Score</td>
+                    <td>@m.Counts.Values.Sum().ToString("N0")</td>
+                    <td>@m.Findings.ToString("N0")</td>
+                    <td>@(m.Deep ? "Deep" : "Standard")</td>
+                    <td class="muted">@m.RunBy</td>
+                    <td><a asp-action="Open" asp-route-publicationId="@m.PublicationId" asp-route-savedId="@m.Id">Open</a></td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}
+else if (!Model.HistoryEnabled)
+{
+    <p class="muted small" style="margin-top:var(--s5)">Saving audits is switched off (Audit:SaveSnapshots), so audits cannot be compared over time.</p>
+}
+
+@section Scripts {
+<script>
+(function () {
+  const filter = document.getElementById('pub-filter');
+  const run = document.getElementById('audit-run');
+  const title = document.getElementById('pub-title');
+  const options = [...document.querySelectorAll('.pub-option')];
+  filter.addEventListener('input', () => {
+    const q = filter.value.trim().toLowerCase();
+    options.forEach(o => { o.parentElement.hidden = q.length > 0 && !o.textContent.toLowerCase().includes(q); });
+  });
+  document.querySelectorAll('input[name=publicationId]').forEach(r => r.addEventListener('change', () => {
+    run.disabled = false;
+    title.value = r.dataset.title;
+  }));
+  document.getElementById('audit-start').addEventListener('submit', () => {
+    run.disabled = true;
+    run.textContent = 'Starting…';
+  });
+})();
+</script>
+}

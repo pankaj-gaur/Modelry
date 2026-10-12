@@ -34,6 +34,8 @@ public sealed class TridionSession
     public string? CoreServiceUrl => _s.GetString(UrlKey);
     public string? UserName => _s.GetString(UserKey);
     public string? ApiVersion => _s.GetString(VersionKey);
+    /// <summary>Version-dependent features of the connected CM (Tridion only), from the API version read at login.</summary>
+    public Modelry.Core.Gateway.CmsCapabilities Capabilities => Modelry.Core.Gateway.CmsCapabilities.From(ApiVersion);
     public DateTimeOffset ExpiresAt => DateTimeOffset.TryParse(_s.GetString(ExpiresKey), out var d) ? d : DateTimeOffset.MinValue;
 
     public bool IsConnected => Mode switch
@@ -46,6 +48,8 @@ public sealed class TridionSession
     };
 
     public string Who => IsDemo ? "Demo mode" : $"{UserName} @ {new Uri(CoreServiceUrl!).Host}";
+    /// <summary>"tridion" or "aem" for the audit (labels, columns, checks).</summary>
+    public string AuditCms => IsAem ? Modelry.Core.Audit.AuditCms.Aem : Modelry.Core.Audit.AuditCms.Tridion;
     public string Host => IsDemo ? "In-memory demo" : Uri.TryCreate(CoreServiceUrl, UriKind.Absolute, out var u) ? u.Host : "";
 
     public CoreServiceConnection Connection => Mode switch
@@ -70,11 +74,26 @@ public sealed class TridionSession
         _s.SetString(TokenKey, _protector.Protect(token)); _s.SetString(ExpiresKey, expires.ToString("O")); _s.SetString(VersionKey, version);
     }
 
+    /// <summary>Demo mode for the chosen CMS (Tridion: in-memory gateway; AEM: in-memory demo author).</summary>
     public void SignInDemo()
     {
+        var aem = IsAem;
         Reset();
-        _s.SetString(CmsKey, "tridion");
-        _s.SetString(ModeKey, "demo"); _s.SetString(VersionKey, "Demo mode (in-memory)");
+        _s.SetString(CmsKey, aem ? "aem" : "tridion");
+        _s.SetString(ModeKey, "demo"); _s.SetString(VersionKey, aem ? "Demo mode (AEM, in-memory)" : "Demo mode (in-memory)");
+    }
+
+    /// <summary>The AEM author connection (AEM sign-in only).</summary>
+    public Modelry.Core.Audit.Aem.AemConnection AemConnection
+    {
+        get
+        {
+            if (Mode != "aem") throw new InvalidOperationException("Not connected to AEM.");
+            var token = _s.GetString(TokenKey);
+            return token is not null
+                ? new Modelry.Core.Audit.Aem.AemConnection(CoreServiceUrl!, true, UserName, _protector.Unprotect(token))
+                : new Modelry.Core.Audit.Aem.AemConnection(CoreServiceUrl!, false, UserName, _protector.Unprotect(_s.GetString(PasswordKey)!));
+        }
     }
 
     public void SignInAem(string url, string user, string secret, bool isToken, string version)

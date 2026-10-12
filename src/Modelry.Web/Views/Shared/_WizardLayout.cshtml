@@ -1,3 +1,4 @@
+@inject TridionSession Cms
 @{
     Layout = "_Layout";
     ViewData["InWizard"] = true;
@@ -7,6 +8,10 @@
         <partial name="_Rail" />
     </nav>
     <div class="wizard__main">
+        @if (!Cms.IsAem && Cms.Capabilities.BuildUntested)
+        {
+            <div class="alert alert--warn" role="status"><p>Connected to @Cms.Capabilities.Display. Creating schemas, templates and pages is tested on Tridion Sites 10 – on 9.x, check the results in the CMS before relying on them.</p></div>
+        }
         @if (TempData["Error"] is string err)
         {
             <div class="alert alert--error" role="alert"><p>@err</p></div>

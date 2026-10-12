@@ -1,0 +1,34 @@
+@inject TridionSession Cms
+@{
+    // ViewData: Step ("publication" | "dashboard"), AuditPublication (title), AuditMeta (dashboard line), AuditDone (bool)
+    var current = ViewData["Step"] as string ?? "publication";
+    var pubTitle = ViewData["AuditPublication"] as string;
+    var done = ViewData["AuditDone"] as bool? == true;
+    var steps = new (string Key, string Title, string State, string Meta, bool Link)[]
+    {
+        ("cms", "Target CMS", "is-done", Cms.CmsName, false),
+        ("connect", "Connect", "is-done", Cms.IsDemo ? "Demo data" : $"{Cms.UserName}, {Cms.Host}", false),
+        ("publication", Cms.IsAem ? "Site" : "Publication", current == "publication" ? "is-current" : "is-done", pubTitle ?? $"Choose the {(Cms.IsAem ? "site" : "publication")} to audit", current != "publication"),
+        ("dashboard", "Audit", current == "dashboard" ? (done ? "is-done is-current" : "is-current") : "is-locked",
+            ViewData["AuditMeta"] as string ?? "Counts, detail tables, Excel export", false),
+    };
+}
+<ol>
+    @for (var i = 0; i < steps.Length; i++)
+    {
+        var s = steps[i];
+        <li class="@s.State" aria-current="@(s.State.Contains("is-current") ? "step" : null)">
+            <span class="rail__dot" aria-hidden="true">@(s.State == "is-done" ? "✓" : (i + 1).ToString())</span>
+            @if (s.Link)
+            {
+                <a class="rail__title" asp-controller="Audit" asp-action="Index">@s.Title</a>
+            }
+            else
+            {
+                <span class="rail__title">@s.Title</span>
+            }
+            <span class="rail__meta">@s.Meta</span>
+        </li>
+    }
+</ol>
+<p class="rail__version"><span class="version-badge" title="Core Service API @Cms.ApiVersion">@Cms.Capabilities.Display</span></p>

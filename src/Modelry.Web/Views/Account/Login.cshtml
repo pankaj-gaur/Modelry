@@ -67,7 +67,7 @@
         }
             <div class="actions">
                 <button type="submit" class="btn btn--primary">Connect</button>
-                @if (!aem && Model.DemoAllowed)
+                @if (Model.DemoAllowed)
                 {
                     <button type="submit" name="Demo" value="true" class="btn btn--quiet" formnovalidate>Explore with demo data</button>
                 }

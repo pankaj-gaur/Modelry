@@ -1,0 +1,145 @@
+@model AuditCompareViewModel
+@{
+    var c = Model.Comparison;
+    var before = c.Before;
+    var after = c.After;
+    ViewData["Title"] = $"Compare audits – {after.PublicationTitle}";
+    Layout = "_AuditLayout";
+    ViewData["Step"] = "dashboard";
+    ViewData["AuditPublication"] = after.PublicationTitle;
+    ViewData["AuditDone"] = true;
+    ViewData["AuditMeta"] = "Comparing two audits";
+    string When(AuditSnapshot s) => s.FinishedUtc.ToLocalTime().ToString("d MMM yyyy, HH:mm");
+    string Delta(int d) => d == 0 ? "±0" : d > 0 ? $"+{d:N0}" : $"−{-d:N0}";
+    var b = before.Health?.Overall ?? 0;
+    var a = after.Health?.Overall ?? 0;
+    var trend = Model.Trend;
+}
+<div class="step-head">
+    <span class="step-no">Audit · compare</span>
+    <h1>@after.PublicationTitle</h1>
+    <p class="lead">
+        Earlier: <b>@When(before)</b>@(Model.CurrentIsLater ? " (saved)" : " (open audit)") ·
+        Later: <b>@When(after)</b>@(Model.CurrentIsLater ? " (open audit)" : " (saved)")
+    </p>
+    @if (before.Deep != after.Deep)
+    {
+        <div class="alert alert--warn" role="status"><p>One audit is a deep scan and the other is not. Usage is scored only in a deep scan, so the overall scores are not directly comparable: compare two audits of the same scan type for a fair trend.</p></div>
+    }
+    <a class="btn btn--quiet" asp-action="Dashboard" asp-route-id="@Model.JobId">← Back to the dashboard</a>
+</div>
+
+<section class="health-row">
+    <div class="health card">
+        <div class="health__score">
+            <span class="health__value">@a</span><span class="health__of">/ 100</span>
+        </div>
+        <span class="grade grade--@HealthScore.GradeOf(a)">Grade @HealthScore.GradeOf(a)</span>
+        <p class="small health__note"><span class="delta @(a > b ? "delta--good" : a < b ? "delta--bad" : "")">@Delta(a - b)</span> since @When(before) (was @b, grade @HealthScore.GradeOf(b))</p>
+    </div>
+    <div class="health-cats card">
+        @foreach (var cat in Enum.GetValues<FindingCategory>().Where(cat => !AuditRules.NotScoredInThisScan(after, cat)))
+        {
+            var was = AuditRules.NotScoredInThisScan(before, cat) ? null : before.Health?.Categories.GetValueOrDefault(cat);
+            var now = after.Health?.Categories.GetValueOrDefault(cat);
+            <div class="health-cat">
+                <span class="health-cat__label">@AuditRules.CategoryTitle(cat)</span>
+                <span class="health-cat__bar" aria-hidden="true"><span class="grade-bg--@(now is null ? "na" : HealthScore.GradeOf(now.Value))" style="width:@(now ?? 0)%"></span></span>
+                <b class="health-cat__value">@(now?.ToString() ?? "–")</b>
+                <span class="delta small @(now > was ? "delta--good" : now < was ? "delta--bad" : "")">@(now is not null && was is not null ? Delta(now.Value - was.Value) : "")</span>
+            </div>
+        }
+        @if (!after.Deep)
+        {
+            <p class="muted small">Usage is scored only in a deep scan.</p>
+        }
+    </div>
+</section>
+
+@if (trend.Count >= 2)
+{
+    var w = 640.0; var h = 120.0; var pad = 24.0;
+    var step = (w - 2 * pad) / (trend.Count - 1);
+    var points = trend.Select((m, i) => (X: pad + i * step, Y: pad + (h - 2 * pad) * (1 - m.Score / 100.0), M: m)).ToList();
+    <h2 class="section-title">Health over time</h2>
+    <div class="card trend">
+        <svg viewBox="0 0 @w @h" role="img" aria-label="Health score of @trend.Count saved audits, from @trend[0].Score to @trend[^1].Score">
+            <line x1="@pad" y1="@pad" x2="@(w - pad)" y2="@pad" class="trend__grid" />
+            <line x1="@pad" y1="@(h - pad)" x2="@(w - pad)" y2="@(h - pad)" class="trend__grid" />
+            <polyline class="trend__line" points="@string.Join(" ", points.Select(p => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{p.X:0.#},{p.Y:0.#}")))" />
+            @foreach (var p in points)
+            {
+                <circle cx="@p.X.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)" cy="@p.Y.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)" r="4" class="trend__dot"><title>@p.M.FinishedUtc.ToLocalTime().ToString("d MMM yyyy, HH:mm"): @p.M.Score</title></circle>
+            }
+            <text x="4" y="@(pad + 4)" class="trend__label">100</text>
+            <text x="4" y="@(h - pad + 4)" class="trend__label">0</text>
+        </svg>
+        <p class="muted small">@trend.Count saved audits · @trend[0].FinishedUtc.ToLocalTime().ToString("d MMM yyyy") – @trend[^1].FinishedUtc.ToLocalTime().ToString("d MMM yyyy")</p>
+    </div>
+}
+
+<h2 class="section-title">Building blocks</h2>
+<div class="table-wrap">
+    <table class="data">
+        <thead><tr><th>Building block</th><th>Earlier</th><th>Later</th><th>Change</th><th>Added</th><th>Removed</th><th>Published (earlier → later)</th><th>Newly published</th><th>No longer published</th></tr></thead>
+        <tbody>
+        @foreach (var k in c.Kinds)
+        {
+            <tr>
+                <td>@AuditCatalog.Title(k.Kind, after.Cms)</td>
+                <td>@k.Before.ToString("N0")</td>
+                <td>@k.After.ToString("N0")</td>
+                <td><span class="delta">@Delta(k.After - k.Before)</span></td>
+                <td>@(k.Added.Count > 0 ? k.Added.Count.ToString("N0") : "")</td>
+                <td>@(k.Removed.Count > 0 ? k.Removed.Count.ToString("N0") : "")</td>
+                <td>@(AuditCatalog.IsPublishable(k.Kind) ? $"{k.PublishedBefore:N0} → {k.PublishedAfter:N0}" : "")</td>
+                <td>@(AuditCatalog.IsPublishable(k.Kind) && k.NewlyPublished > 0 ? k.NewlyPublished.ToString("N0") : "")</td>
+                <td>@(AuditCatalog.IsPublishable(k.Kind) && k.NoLongerPublished > 0 ? k.NoLongerPublished.ToString("N0") : "")</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+<h2 class="section-title">Findings</h2>
+<div class="table-wrap">
+    <table class="data">
+        <thead><tr><th>Check</th><th>Category</th><th>Earlier</th><th>Later</th><th>Change</th></tr></thead>
+        <tbody>
+        @foreach (var r in c.Rules.OrderBy(r => r.Category).ThenBy(r => r.Id))
+        {
+            var d = r.Before is not null && r.After is not null ? r.After.Value - r.Before.Value : (int?)null;
+            <tr>
+                <td><span class="sev sev--@r.Severity">@r.Severity</span> @r.Title</td>
+                <td>@AuditRules.CategoryTitle(r.Category)</td>
+                <td>@(r.Before?.ToString("N0") ?? "not checked")</td>
+                <td>@(r.After?.ToString("N0") ?? "not checked")</td>
+                <td>@if (d is not null) { <span class="delta @(d < 0 ? "delta--good" : d > 0 ? "delta--bad" : "")">@Delta(d.Value)</span> }</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+@if (c.Kinds.Any(k => k.Added.Count + k.Removed.Count > 0))
+{
+    <h2 class="section-title">Added and removed items</h2>
+    @foreach (var k in c.Kinds.Where(k => k.Added.Count + k.Removed.Count > 0))
+    {
+        <details class="change-list">
+            <summary class="btn btn--quiet">@AuditCatalog.Title(k.Kind, after.Cms): @k.Added.Count added, @k.Removed.Count removed</summary>
+            <div class="change-list__cols">
+                <div>
+                    <h3>Added</h3>
+                    <ul>@foreach (var r in k.Added.Take(200)) { <li>@r.Title <span class="cell-id">@r.Id</span></li> }</ul>
+                    @if (k.Added.Count > 200) { <p class="muted small">… and @(k.Added.Count - 200) more.</p> }
+                </div>
+                <div>
+                    <h3>Removed</h3>
+                    <ul>@foreach (var r in k.Removed.Take(200)) { <li>@r.Title <span class="cell-id">@r.Id</span></li> }</ul>
+                    @if (k.Removed.Count > 200) { <p class="muted small">… and @(k.Removed.Count - 200) more.</p> }
+                </div>
+            </div>
+        </details>
+    }
+}

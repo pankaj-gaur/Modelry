@@ -2,6 +2,7 @@ using Serilog;
 using Modelry.Core.Gateway;
 using Modelry.Tridion;
 using Modelry.Web.Services;
+using Modelry.Web.Services.Orchestrator;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseSerilog((ctx, lc) => lc.ReadFrom.Configuration(ctx.Configuration));
@@ -9,6 +10,7 @@ builder.Host.UseSerilog((ctx, lc) => lc.ReadFrom.Configuration(ctx.Configuration
 var tridion = builder.Configuration.GetSection("Tridion").Get<TridionOptions>() ?? new TridionOptions();
 builder.Services.Configure<TridionOptions>(builder.Configuration.GetSection("Tridion"));
 builder.Services.Configure<TemplateFieldOptions>(builder.Configuration.GetSection("Templates"));
+builder.Services.Configure<Modelry.Core.Audit.AuditOptions>(builder.Configuration.GetSection("Audit"));
 builder.Services.AddControllersWithViews(o => { o.Filters.Add<RequireTridionSessionFilter>(); o.Filters.Add<StepTrackingFilter>(); });
 builder.Services.AddAntiforgery(o => o.HeaderName = "RequestVerificationToken");
 builder.Services.AddDistributedMemoryCache();
@@ -32,11 +34,22 @@ builder.Services.AddSingleton<InMemoryTridionGateway>();
 builder.Services.AddScoped<TridionSession>();
 builder.Services.AddScoped<WizardState>();
 builder.Services.AddHttpClient<AemConnectionClient>();
+// AEM audit: long-running QueryBuilder calls; same proxy settings as the token client.
+builder.Services.AddHttpClient("aem-audit", c => c.Timeout = TimeSpan.FromSeconds(tridion.TimeoutSeconds))
+    .ConfigurePrimaryHttpMessageHandler(() => string.IsNullOrWhiteSpace(tridion.ProxyUrl)
+        ? new HttpClientHandler()
+        : new HttpClientHandler { Proxy = new System.Net.WebProxy(tridion.ProxyUrl, BypassOnLocal: true), UseProxy = true });
 builder.Services.AddScoped<GatewayAccessor>();
 builder.Services.AddScoped<RequireTridionSessionFilter>();
 builder.Services.AddSingleton<UploadStore>();
 builder.Services.AddSingleton<ImportJobStore>();
 builder.Services.AddSingleton<PageRunStore>();
+builder.Services.AddSingleton<AuditJobStore>();
+builder.Services.AddSingleton<AuditSnapshotStore>();
+// AI executive summary of audits: orchestrator client (server-side only) + prompts from ai-summary.json.
+builder.Services.AddOrchestrator(builder.Configuration);
+builder.Services.AddSingleton<AuditSummarySettingsProvider>();
+builder.Services.AddSingleton<AuditSummaryService>();
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o =>
     o.MultipartBodyLengthLimit = tridion.MaxUploadMegabytes * 1024L * 1024L);
 

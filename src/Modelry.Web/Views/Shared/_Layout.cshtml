@@ -8,7 +8,7 @@
     <link rel="icon" href="~/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
-<body>
+<body class="@(ViewData["WidePage"] is true ? "page--wide" : null)">
 <a class="sr-only" href="#main">Skip to content</a>
 <header class="app-header">
     <div class="app-header__inner">
@@ -17,6 +17,10 @@
             <span class="brand__name">Modelry</span>
         </a>
         <nav class="app-nav" aria-label="Tools">
+            @if (Cms.IsConnected)
+            {
+                <a class="hide-sm" asp-controller="Audit" asp-action="Index">Audit CMS</a>
+            }
             @if (Cms.IsConnected && !Cms.IsAem)
             {
                 <a class="hide-sm" asp-controller="Export" asp-action="Index">Export from CMS</a>
@@ -25,7 +29,7 @@
         </nav>
         @if (Cms.IsConnected)
         {
-            <div class="conn" title="@Cms.ApiVersion">
+            <div class="conn" title="@(Cms.IsAem ? Cms.Capabilities.Display : $"{Cms.Capabilities.Display} (API {Cms.ApiVersion})")">
                 <span class="conn__dot" aria-hidden="true"></span>
                 <span class="conn__text"><b>@Cms.CmsName</b><span>@(Cms.IsDemo ? "Demo data" : $"{Cms.UserName} on {Cms.Host}")</span></span>
                 <form asp-controller="Account" asp-action="Logout" method="post"><button type="submit" class="btn btn--quiet btn--small">Sign out</button></form>
@@ -38,12 +42,17 @@
     {
         <div class="page" style="padding-top:24px"><div class="alert alert--error" role="alert"><p>@err</p></div></div>
     }
+    @if (TempData["Notice"] is string notice)
+    {
+        <div class="page" style="padding-top:24px"><div class="alert alert--warn" role="status"><p>@notice</p></div></div>
+    }
     @RenderBody()
 </main>
 <footer class="app-footer">
     <div class="app-footer__inner">
         <span>Modelry is built by</span>
         <img src="~/img/content-bloom-logo.jpg" alt="Content Bloom" width="94" height="30" />
+        <span class="app-footer__build">Modelry 1.1</span>
     </div>
 </footer>
 @await RenderSectionAsync("Scripts", required: false)

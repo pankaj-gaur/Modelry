@@ -1,0 +1,371 @@
+@model AuditDashboardViewModel
+@inject TridionSession Cms
+@{
+    var job = Model.Job;
+    var s = Model.Snapshot;
+    ViewData["Title"] = $"Audit – {job.PublicationTitle}";
+    Layout = "_AuditLayout";
+    ViewData["Step"] = "dashboard";
+    ViewData["AuditPublication"] = job.PublicationTitle;
+    ViewData["AuditDone"] = s is not null;
+    ViewData["AuditMeta"] = s is null ? (job.State == AuditJobState.Running ? "Reading the publication…" : "Not finished")
+        : $"{s.Items.Values.Sum(v => v.Count):N0} items · {s.FinishedUtc.ToLocalTime():HH:mm}";
+}
+@Html.AntiForgeryToken()
+
+@if (s is null)
+{
+    <div id="audit-progress" data-id="@job.Id" data-state="@job.State">
+        <div class="step-head">
+            <span class="step-no">Audit · Step 4 of 4</span>
+            <h1>Auditing @job.PublicationTitle</h1>
+            <p class="lead">Modelry is reading the @AuditCatalog.RootNoun(job.CmsKind). Nothing is changed. You can leave this page open – it updates by itself.</p>
+        </div>
+        <div class="card">
+            <div class="progress-headline">
+                <p class="progress-label" id="step-label">Starting…</p>
+                <span class="pct" id="pct"></span>
+            </div>
+            <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="step-label">
+                <div class="progress-bar" id="bar"></div>
+            </div>
+            <p class="progress-item" id="item" aria-live="polite"></p>
+            <ol class="steps" id="steps">
+                @{ var stepNames = job.StepNames; }
+                @for (var i = 0; i < stepNames.Length; i++)
+                {
+                    <li data-step="@(i + 1)" class="pending"><span class="dot" aria-hidden="true"></span><span>@stepNames[i]</span></li>
+                }
+            </ol>
+            <p class="muted small">Elapsed <span id="elapsed">0:00</span></p>
+            <div class="alert alert--error" id="failed" hidden role="alert"><p id="failed-text"></p></div>
+            <div class="actions">
+                <button type="button" class="btn" id="cancel">Stop the audit</button>
+                <form asp-action="Run" method="post" id="retry" hidden>
+                    <input type="hidden" name="publicationId" value="@job.PublicationId" />
+                    <input type="hidden" name="publicationTitle" value="@job.PublicationTitle" />
+                    <input type="hidden" name="refresh" value="true" />
+                    <button class="btn btn--primary" type="submit">Run again</button>
+                </form>
+                <a class="btn btn--quiet" asp-action="Index" id="back" hidden>Choose another publication</a>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    var caps = s.Capabilities;
+    var duration = s.FinishedUtc - s.StartedUtc;
+    <div id="audit-dashboard">
+        <div class="audit-head">
+            <div>
+                <span class="step-no">Audit · @s.PublicationId</span>
+                <h1>@s.PublicationTitle</h1>
+                <p class="audit-meta">
+                    <span class="version-badge" title="Core Service API @caps.Raw">@caps.Display</span>
+                    <span>@(Cms.IsDemo ? "Demo CMS" : s.CmsHost)</span>
+                    <span>Run @s.FinishedUtc.ToLocalTime().ToString("d MMM yyyy, HH:mm")@(Cms.IsDemo ? "" : $" by {s.RunBy}")</span>
+                    <span>@(duration.TotalMinutes >= 1 ? $"{(int)duration.TotalMinutes} min {duration.Seconds} s" : $"{Math.Max(1, (int)duration.TotalSeconds)} s")</span>
+                    <span>@(s.Deep ? "Deep scan" : "Standard scan")</span>
+                    @if (job.FromHistory) { <span class="pill pill--amber">Saved audit</span> }
+                </p>
+            </div>
+            <div class="audit-head__actions">
+                <a class="btn btn--primary" asp-action="Export" asp-route-id="@job.Id">Export to Excel</a>
+                <a class="btn" asp-action="Report" asp-route-id="@job.Id" asp-route-print="true" target="_blank" rel="noopener">Export to PDF</a>
+                <form asp-action="Run" method="post">
+                    <input type="hidden" name="publicationId" value="@job.PublicationId" />
+                    <input type="hidden" name="publicationTitle" value="@job.PublicationTitle" />
+                    <input type="hidden" name="refresh" value="true" />
+                    <input type="hidden" name="deep" value="@(s.Deep ? "true" : "false")" />
+                    <button class="btn" type="submit">Run again</button>
+                </form>
+                @if (!s.Deep)
+                {
+                    <form asp-action="Run" method="post">
+                        <input type="hidden" name="publicationId" value="@job.PublicationId" />
+                        <input type="hidden" name="publicationTitle" value="@job.PublicationTitle" />
+                        <input type="hidden" name="refresh" value="true" />
+                        <input type="hidden" name="deep" value="true" />
+                        <button class="btn" type="submit" title="Also read where every component, multimedia component, keyword and category is used">Run deep scan</button>
+                    </form>
+                }
+            </div>
+        </div>
+
+        @if (s.Notes.Count > 0 || s.Unavailable.Count > 0)
+        {
+            <details class="audit-notes">
+                <summary class="btn btn--quiet">Audit notes (@(s.Notes.Count + s.Unavailable.Count))</summary>
+                <ul>
+                    @foreach (var n in s.Notes) { <li>@n</li> }
+                    @foreach (var (column, reason) in s.Unavailable) { <li><b>@column</b> not available: @reason</li> }
+                </ul>
+            </details>
+        }
+
+        @* AI executive summary: hidden until the script knows there is one, or the feature is switched on. *@
+        <section class="ai-summary card" id="ai-summary" data-job="@job.Id" data-enabled="@(Model.AiSummaryEnabled ? "true" : "false")" aria-labelledby="ai-title" hidden>
+            <div class="ai-summary__head">
+                <div>
+                    <span class="ai-summary__kicker">AI executive summary</span>
+                    <h2 id="ai-title" class="ai-summary__title">What this audit means for the business</h2>
+                </div>
+                <div class="ai-summary__buttons">
+                    <button type="button" class="btn btn--primary btn--small" id="ai-generate" hidden>Generate AI summary</button>
+                    <button type="button" class="btn btn--quiet btn--small" id="ai-regenerate" hidden>Regenerate</button>
+                </div>
+            </div>
+            <div id="ai-body" aria-live="polite">
+                <p class="muted ai-summary__intro">A short summary in plain business language: what the result means, what to do next and the decision to take. It takes 2–3 minutes. Only scores, counts and check names are sent to the AI service – no page or content names.</p>
+            </div>
+        </section>
+
+        @if (s.Health is { } health)
+        {
+            <section class="health-row" aria-label="Health">
+                <div class="health card">
+                    <div class="health__score">
+                        <span class="health__value">@health.Overall</span><span class="health__of">/ 100</span>
+                    </div>
+                    <span class="grade grade--@health.Grade">Grade @health.Grade</span>
+                    <p class="muted small health__note">Scored on @s.Rules.Count(r => r.CountsTowardsScore) of @s.Rules.Count checks. Checks that could not run@(s.Deep ? "" : ", and usage in a standard scan,") are left out.</p>
+                    <button type="button" class="link-button small" id="score-how" aria-haspopup="dialog">How is this score calculated?</button>
+                </div>
+                <div class="health-cats card">
+                    @foreach (var (cat, value) in health.Categories.Where(c => !AuditRules.NotScoredInThisScan(s, c.Key)))
+                    {
+                        <div class="health-cat">
+                            <span class="health-cat__label">@AuditRules.CategoryTitle(cat)</span>
+                            <span class="health-cat__bar" aria-hidden="true"><span class="grade-bg--@(value is null ? "na" : HealthScore.GradeOf(value.Value))" style="width:@(value ?? 0)%"></span></span>
+                            <b class="health-cat__value">@(value?.ToString() ?? "–")</b>
+                        </div>
+                    }
+                    @if (!s.Deep)
+                    {
+                        <p class="muted small health-cats__note">Usage is scored only in a deep scan.</p>
+                    }
+                    @if (Model.Saved.Count > 0)
+                    {
+                        <form asp-action="Compare" method="get" class="compare-form">
+                            <input type="hidden" name="id" value="@job.Id" />
+                            <label class="small" for="compare-with">Compare with</label>
+                            <select id="compare-with" name="with">
+                                @foreach (var m in Model.Saved)
+                                {
+                                    <option value="@m.Id">@m.FinishedUtc.ToLocalTime().ToString("d MMM yyyy, HH:mm") · score @m.Score@(m.Deep ? " · deep" : "")</option>
+                                }
+                            </select>
+                            <button class="btn btn--small" type="submit">Compare</button>
+                        </form>
+                    }
+                </div>
+            </section>
+
+        }
+
+        @foreach (var (groupTitle, groupKinds) in new[]
+        {
+            ("Content model", new[] { AuditKind.Schemas, AuditKind.ComponentTemplates, AuditKind.PageTemplates }),
+            ("Content", new[] { AuditKind.Components, AuditKind.Multimedia, AuditKind.Pages }),
+            ("Taxonomy and site structure", new[] { AuditKind.Categories, AuditKind.Keywords, AuditKind.StructureGroups }),
+        })
+        {
+            <h2 class="tiles-title">@groupTitle</h2>
+            <div class="tiles" role="list">
+            @foreach (var kind in groupKinds)
+            {
+                var sum = s.Summarize(kind);
+                var publishNa = AuditCatalog.IsPublishable(kind) ? s.UnavailableReason(kind, "publish") : null;
+                var aemLabels = AuditCms.IsAem(s.Cms);
+                var origin = new[] { (sum.Local, "local"), (sum.Shared, aemLabels ? "live copy" : "shared"), (sum.Localized, aemLabels ? "inheritance cancelled" : "localized") }
+                    .Where(o => o.Item1 > 0).Select(o => $"{o.Item1:N0} {o.Item2}");
+                <button type="button" class="tile" role="listitem" data-kind="@kind" aria-controls="detail">
+                    <span class="tile__label">@AuditCatalog.Title(kind, s.Cms)</span>
+                    <span class="tile__count">@sum.Total.ToString("N0")</span>
+                    @if (AuditCatalog.IsPublishable(kind))
+                    {
+                        if (publishNa is not null)
+                        {
+                            <span class="tile__sub muted" title="@publishNa">Publish status not available</span>
+                        }
+                        else if (sum.Total > 0)
+                        {
+                            var pPub = 100.0 * sum.Published / sum.Total;
+                            var pUn = 100.0 * sum.Unpublished / sum.Total;
+                            <span class="tile__bar" aria-hidden="true">
+                                <span class="tile__bar-pub" style="width:@pPub.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span>
+                                <span class="tile__bar-un" style="width:@pUn.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span>
+                            </span>
+                            <span class="tile__sub"><b class="pub">@sum.Published.ToString("N0")</b> published · <b class="un">@sum.Unpublished.ToString("N0")</b> not@(sum.PublishUnknown > 0 ? $" · {sum.PublishUnknown:N0} unknown" : "")</span>
+                        }
+                        else
+                        {
+                            <span class="tile__sub muted">None in this publication</span>
+                        }
+                    }
+                    else if (kind == AuditKind.Categories)
+                    {
+                        <span class="tile__sub">@s.Items[AuditKind.Keywords].Count.ToString("N0") @(AuditCms.IsAem(s.Cms) ? "tags" : "keywords")</span>
+                    }
+                    else if (kind == AuditKind.Schemas && AuditCms.IsAem(s.Cms))
+                    {
+                        <span class="tile__sub">@s.Items[kind].Count(r => r.Value("status") != "disabled") enabled</span>
+                    }
+                    else if (kind == AuditKind.PageTemplates && AuditCms.IsAem(s.Cms) && s.Items[kind].Count(r => r.Value("status") == "disabled") is var disabled and > 0)
+                    {
+                        <span class="tile__sub">@disabled disabled</span>
+                    }
+                    else if (kind == AuditKind.Schemas)
+                    {
+                        var byPurpose = s.Items[kind].GroupBy(r => r.Value("purpose")).Where(g => g.Key.Length > 0).OrderByDescending(g => g.Count()).Take(3);
+                        <span class="tile__sub">@string.Join(" · ", byPurpose.Select(g => $"{g.Count()} {g.Key.ToLowerInvariant()}"))</span>
+                    }
+                    else if (kind == AuditKind.StructureGroups && s.Items[kind].Count(r => r.Value("active") == "No") is var inactive and > 0)
+                    {
+                        <span class="tile__sub">@inactive inactive</span>
+                    }
+                    else if (kind == AuditKind.StructureGroups && s.Items[kind].Count(r => r.Value("language") == "Yes") is var languages and > 0)
+                    {
+                        <span class="tile__sub">@languages language roots</span>
+                    }
+                    @if (sum.Total > 0)
+                    {
+                        <span class="tile__origin">@string.Join(" · ", origin)</span>
+                    }
+                </button>
+            }
+            </div>
+        }
+
+        @if (s.Health is { } findHealth)
+        {
+            <section class="findings" aria-labelledby="findings-title">
+                <div class="audit-detail__head">
+                    <h2 id="findings-title">Findings</h2>
+                    <span class="muted">@s.Findings.Select(f => f.ItemId).Distinct().Count().ToString("N0") items flagged by @s.Rules.Count(r => r.Evaluated && r.Affected > 0) checks</span>
+                </div>
+                <div class="findings__groups">
+                @foreach (var group in s.Rules.GroupBy(r => r.Category))
+                {
+                    <div class="findings__group">
+                        <h3>@AuditRules.CategoryTitle(group.Key) <span class="muted">@(AuditRules.NotScoredInThisScan(s, group.Key) ? "review only – scored in a deep scan" : findHealth.Categories[group.Key]?.ToString() ?? "not checked")</span></h3>
+                        <ul class="rule-list">
+                        @foreach (var rule in group.Where(r => r.NotEvaluatedReason?.StartsWith("Replaced") != true).OrderByDescending(r => r.Evaluated).ThenByDescending(r => r.Affected > 0).ThenByDescending(r => r.Severity))
+                        {
+                            <li>
+                                <button type="button" class="rule @(rule.Evaluated ? rule.Affected > 0 ? "rule--hit" : "rule--ok" : "rule--na")" data-rule="@rule.Id"
+                                        disabled="@(rule.Evaluated && rule.Affected > 0 ? null : "disabled")" title="@rule.Description@(rule.Evaluated && !rule.Scored ? " – " + rule.NotScoredReason : "")">
+                                    <span class="sev sev--@rule.Severity">@rule.Severity</span>
+                                    <span class="rule__title">@rule.Title@if (rule.Evaluated && !rule.Scored && !AuditRules.NotScoredInThisScan(s, rule.Category)) { <span class="rule__tag">not scored</span> }</span>
+                                    <span class="rule__count">
+                                        @if (!rule.Evaluated) { <span title="@rule.NotEvaluatedReason">@(rule.NeedsDeepScan ? "Needs deep scan" : "Not checked")</span> }
+                                        else if (rule.Affected == 0) { <span>✓ none</span> }
+                                        else { <b>@rule.Affected.ToString("N0")</b><span class="muted"> of @rule.Population.ToString("N0")</span> }
+                                    </span>
+                                </button>
+                            </li>
+                        }
+                        </ul>
+                    </div>
+                }
+                </div>
+            </section>
+
+            <section id="finding-detail" class="audit-detail" hidden aria-live="polite">
+                <div class="audit-detail__head">
+                    <h2 id="finding-title"></h2>
+                    <span class="muted" id="finding-count"></span>
+                </div>
+                <p class="muted" id="finding-desc"></p>
+                <div class="table-wrap">
+                    <table class="data audit-table">
+                        <thead><tr><th>Item</th><th>Building block</th><th>Location</th><th>Detail</th></tr></thead>
+                        <tbody id="finding-body"></tbody>
+                    </table>
+                </div>
+                <div class="pager">
+                    <label class="rows-per-page small">Rows per page
+                        <select id="f-page-size">@foreach (var n in Modelry.Web.Controllers.AuditController.RowsPerPageChoices) { <option value="@n" selected="@(n == Model.PageSize ? "selected" : null)">@n</option> }</select>
+                    </label>
+                    <button type="button" class="btn btn--small" id="f-prev">Previous</button>
+                    <span class="muted small" id="f-page-info"></span>
+                    <button type="button" class="btn btn--small" id="f-next">Next</button>
+                </div>
+            </section>
+        }
+
+        <section id="detail" class="audit-detail" hidden aria-live="polite">
+            <div class="audit-detail__head">
+                <h2 id="detail-title"></h2>
+                <span class="muted" id="detail-count"></span>
+            </div>
+            <div class="audit-toolbar">
+                <input type="search" id="detail-search" placeholder="Search title, ID, path or any column" aria-label="Search this table" />
+                <div class="filters" id="origin-filter" role="group" aria-label="@AuditCatalog.OriginLabel(s.Cms) origin">
+                    <button type="button" data-value="" aria-pressed="true">All</button>
+                    <button type="button" data-value="Local" aria-pressed="false">@AuditCatalog.Origin(BluePrintOrigin.Local, s.Cms)</button>
+                    <button type="button" data-value="Shared" aria-pressed="false">@AuditCatalog.Origin(BluePrintOrigin.Shared, s.Cms)</button>
+                    <button type="button" data-value="Localized" aria-pressed="false">@AuditCatalog.Origin(BluePrintOrigin.Localized, s.Cms)</button>
+                </div>
+                <div class="filters" id="publish-filter" role="group" aria-label="Publish status">
+                    <button type="button" data-value="" aria-pressed="true">All</button>
+                    <button type="button" data-value="Published" aria-pressed="false">Published</button>
+                    <button type="button" data-value="Unpublished" aria-pressed="false">Not published</button>
+                    <button type="button" data-value="Unknown" aria-pressed="false">Unknown</button>
+                </div>
+                <div class="filters" id="finding-filter" role="group" aria-label="Findings">
+                    <button type="button" data-value="" aria-pressed="true">All</button>
+                    <button type="button" data-value="any" aria-pressed="false">With findings</button>
+                </div>
+            </div>
+            <div class="table-wrap">
+                <table class="data audit-table">
+                    <thead><tr id="detail-head"></tr></thead>
+                    <tbody id="detail-body"></tbody>
+                </table>
+            </div>
+            <div class="pager">
+                <label class="rows-per-page small">Rows per page
+                    <select id="page-size">@foreach (var n in Modelry.Web.Controllers.AuditController.RowsPerPageChoices) { <option value="@n" selected="@(n == Model.PageSize ? "selected" : null)">@n</option> }</select>
+                </label>
+                <button type="button" class="btn btn--small" id="prev">Previous</button>
+                <span class="muted small" id="page-info"></span>
+                <button type="button" class="btn btn--small" id="next">Next</button>
+            </div>
+        </section>
+    </div>
+
+    <dialog id="item-dialog" class="item-dialog" aria-labelledby="item-title">
+        <div class="item-dialog__head">
+            <div>
+                <span class="item-dialog__kind" id="item-kind"></span>
+                <h2 id="item-title"></h2>
+                <code id="item-id"></code>
+            </div>
+            <button type="button" class="btn btn--quiet btn--small" id="item-close" aria-label="Close">Close</button>
+        </div>
+        <div class="item-dialog__body" id="item-body"></div>
+    </dialog>
+
+    @if (s.Health is not null)
+    {
+        <dialog id="score-dialog" class="item-dialog score-dialog" aria-labelledby="score-title">
+            <div class="item-dialog__head">
+                <div>
+                    <span class="item-dialog__kind">Health score</span>
+                    <h2 id="score-title">How this score is calculated</h2>
+                </div>
+                <button type="button" class="btn btn--quiet btn--small" id="score-close" aria-label="Close">Close</button>
+            </div>
+            <div class="item-dialog__body"><partial name="_ScoreExplained" model="s" /></div>
+        </dialog>
+    }
+
+    <script type="application/json" id="audit-model">@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ClientModel(), new System.Text.Json.JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.Default }))</script>
+}
+
+@section Scripts {
+    <script src="~/js/audit.js" asp-append-version="true"></script>
+    <script src="~/js/audit-summary.js" asp-append-version="true"></script>
+}

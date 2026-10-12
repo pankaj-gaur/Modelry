@@ -1,0 +1,56 @@
+{
+  "english": {
+    "headline": "Publishing bottlenecks and stale content risk brand and speed",
+    "status": "Needs attention",
+    "summary": "Low publishing performance and large amounts of unused or outdated material increase maintenance cost, slow new releases, and dilute customer experience, exposing the brand to inconsistency.",
+    "actions": [
+      {
+        "priority": "Now",
+        "action": "Consolidate and retire unused multimedia assets"
+      },
+      {
+        "priority": "Next",
+        "action": "Streamline publishing workflow and remove dead pages"
+      },
+      {
+        "priority": "Later",
+        "action": "Implement regular content review process"
+      }
+    ],
+    "decision": "Approve immediate cleanup of unused media and dead pages to improve performance and brand consistency",
+    "words": 73,
+    "isEmpty": false
+  },
+  "language": "es",
+  "translated": {
+    "headline": "Cuellos de botella en la publicaci\u00F3n y contenido obsoleto ponen en riesgo la marca y la velocidad",
+    "status": "Necesita atenci\u00F3n",
+    "summary": "El bajo rendimiento en la publicaci\u00F3n y las grandes cantidades de material sin usar u obsoleto aumentan el costo de mantenimiento, ralentizan los nuevos lanzamientos y diluyen la experiencia del cliente, exponiendo a la marca a la inconsistencia.",
+    "actions": [
+      {
+        "priority": "Ahora",
+        "action": "Consolidar y retirar activos multimedia sin usar"
+      },
+      {
+        "priority": "Siguiente",
+        "action": "Optimizar el flujo de trabajo de publicaci\u00F3n y eliminar p\u00E1ginas muertas"
+      },
+      {
+        "priority": "Despu\u00E9s",
+        "action": "Implementar un proceso regular de revisi\u00F3n de contenido"
+      }
+    ],
+    "decision": "Aprobar la limpieza inmediata de medios sin usar y p\u00E1ginas muertas para mejorar el rendimiento y la consistencia de la marca",
+    "words": 107,
+    "isEmpty": false
+  },
+  "createdUtc": "2026-10-11T07:50:09.1776366Z",
+  "createdBy": "dev-cm-service.sabic.com\\pgaur @ dev-cm-service.sabic.com",
+  "resultId": "c73ba1bc-8a54-4c75-982e-5e48163f8242",
+  "trimmed": false,
+  "words": 73,
+  "seconds": 102,
+  "score": 70,
+  "hasTranslation": true,
+  "languageName": "espa\u00F1ol (Spanish)"
+}
