@@ -1,0 +1,56 @@
+{
+  "english": {
+    "headline": "CMS audit reveals inefficiencies, but overall system health is good.",
+    "status": "Needs attention",
+    "summary": "The CMS has a solid foundation but requires optimization. Unused content and inefficiencies impact performance, user experience, and increase maintenance costs.",
+    "actions": [
+      {
+        "priority": "Now",
+        "action": "Remove unused content and streamline templates."
+      },
+      {
+        "priority": "Next",
+        "action": "Optimize multimedia files and publishing processes."
+      },
+      {
+        "priority": "Later",
+        "action": "Review and update content model and site structure."
+      }
+    ],
+    "decision": "Approve resources for immediate content cleanup and template optimization.",
+    "words": 65,
+    "isEmpty": false
+  },
+  "language": "es",
+  "translated": {
+    "headline": "Auditor\u00EDa de CMS revela ineficiencias, pero la salud general del sistema es buena.",
+    "status": "Necesita atenci\u00F3n",
+    "summary": "El CMS tiene una base s\u00F3lida pero requiere optimizaci\u00F3n. El contenido no utilizado y las ineficiencias afectan el rendimiento, la experiencia del usuario y aumentan los costos de mantenimiento.",
+    "actions": [
+      {
+        "priority": "Ahora",
+        "action": "Eliminar contenido no utilizado y simplificar plantillas."
+      },
+      {
+        "priority": "Siguiente",
+        "action": "Optimizar archivos multimedia y procesos de publicaci\u00F3n."
+      },
+      {
+        "priority": "M\u00E1s tarde",
+        "action": "Revisar y actualizar el modelo de contenido y la estructura del sitio."
+      }
+    ],
+    "decision": "Aprobar recursos para la limpieza inmediata de contenido y la optimizaci\u00F3n de plantillas.",
+    "words": 87,
+    "isEmpty": false
+  },
+  "createdUtc": "2026-10-12T07:09:22.7747812Z",
+  "createdBy": "dev-cm-service.sabic.com\\pgaur @ dev-cm-service.sabic.com",
+  "resultId": "17862106-17a9-4995-9362-0785f2e66f9b",
+  "trimmed": false,
+  "words": 65,
+  "seconds": 123,
+  "score": 79,
+  "hasTranslation": true,
+  "languageName": "espa\u00F1ol (Spanish)"
+}
